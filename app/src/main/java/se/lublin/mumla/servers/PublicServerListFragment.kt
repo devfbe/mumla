@@ -36,20 +36,19 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
 import se.lublin.mumla.databinding.DialogServerSearchBinding
 import se.lublin.mumla.databinding.FragmentPublicServerListBinding
-import se.lublin.mumla.db.MumlaRepository
 import se.lublin.mumla.db.PublicServer
 import se.lublin.mumla.ui.ServerRequest
 import se.lublin.mumla.ui.ConnectRequests
 import se.lublin.mumla.ui.showConfirmDialog
+import se.lublin.mumla.util.appViewModels
 import java.util.Locale
 
 /** Displays the public servers, which can be sorted, filtered, matched, favourited and joined. */
@@ -59,9 +58,8 @@ class PublicServerListFragment :
     MenuProvider {
 
     private val connectRequests: ConnectRequests by activityViewModels()
+    private val publicServers by appViewModels { PublicServersViewModel.create(it, fetcher) }
     private var binding: FragmentPublicServerListBinding? = null
-    private var serverAdapter: PublicServerAdapter? = null
-    private val pinger = ServerPinger()
 
     @VisibleForTesting
     internal var fetcher = PublicServerFetcher()
@@ -70,15 +68,35 @@ class PublicServerListFragment :
         val binding = FragmentPublicServerListBinding.inflate(inflater, container, false)
         this.binding = binding
         setUpServerGrid(binding.serverListGrid)
-        binding.serverListGrid.adapter = serverAdapter
-        binding.serverProgress.isVisible = serverAdapter == null
         return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        val binding = requireNotNull(binding)
+        val adapter = PublicServerAdapter(this, publicServers.pings, ::connect)
+        binding.serverListGrid.adapter = adapter
         requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
-        fillPublicList()
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { publicServers.pings.replies.collect(adapter::setReplies) }
+                publicServers.state.collect { show(binding, adapter, it) }
+            }
+        }
+    }
+
+    private fun show(
+        binding: FragmentPublicServerListBinding,
+        adapter: PublicServerAdapter,
+        state: PublicServersViewModel.State,
+    ) {
+        binding.serverProgress.isVisible = state == PublicServersViewModel.State.Loading
+        // The download would bypass Tor.
+        binding.serverListTorNotice.isVisible = state == PublicServersViewModel.State.TorBlocked
+        if (state is PublicServersViewModel.State.Shown) adapter.submitList(state.servers)
+        if (state == PublicServersViewModel.State.DownloadFailed) {
+            Toast.makeText(requireContext(), R.string.error_fetching_servers, Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onDestroyView() {
@@ -96,11 +114,11 @@ class PublicServerListFragment :
     }
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
-        val adapter = serverAdapter ?: return false
+        if (publicServers.state.value !is PublicServersViewModel.State.Shown) return false
         when (menuItem.itemId) {
             R.id.menu_match_server -> showMatchDialog()
-            R.id.menu_sort_server_item -> showSortDialog(adapter)
-            R.id.menu_search_server_item -> showFilterDialog(adapter)
+            R.id.menu_sort_server_item -> showSortDialog()
+            R.id.menu_search_server_item -> showFilterDialog()
             else -> return false
         }
         return true
@@ -119,36 +137,10 @@ class PublicServerListFragment :
             .setTitle(R.string.addFavorite)
             .setView(layout)
             .setPositiveButton(R.string.add) { _, _ ->
-                server.username = usernameField.text.toString().ifEmpty { settings.defaultUsername }
-                val repository = MumlaRepository.get(context)
-                lifecycleScope.launch { repository.io { addServer(server) } }
+                publicServers.favourite(server, usernameField.text.toString().ifEmpty { settings.defaultUsername })
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
-    }
-
-    private fun setServers(servers: List<PublicServer>) {
-        binding?.serverProgress?.isVisible = false
-        val adapter = PublicServerAdapter(requireActivity(), servers, this, lifecycleScope, ::connect)
-        serverAdapter = adapter
-        binding?.serverListGrid?.adapter = adapter
-    }
-
-    private fun fillPublicList() {
-        if (Settings.getInstance(requireContext()).isTorEnabled) {
-            // The download would bypass Tor.
-            binding?.serverProgress?.isVisible = false
-            binding?.serverListTorNotice?.isVisible = true
-            return
-        }
-        viewLifecycleOwner.lifecycleScope.launch {
-            val result = fetcher.fetch()
-            if (result == null) {
-                Toast.makeText(requireContext(), R.string.error_fetching_servers, Toast.LENGTH_SHORT).show()
-            } else {
-                setServers(result)
-            }
-        }
     }
 
     private fun showMatchDialog() {
@@ -161,14 +153,13 @@ class PublicServerListFragment :
 
     /** Looks for an empty, nearby server in [countryCode] (anywhere when null) and offers to join it. */
     private fun findOptimalServer(countryCode: String?) {
-        val candidates = serverAdapter?.shownServers.orEmpty()
         val progressDialog = MaterialAlertDialogBuilder(requireActivity())
             .setMessage(R.string.server_match_progress)
             .setCancelable(true)
             .create()
         val job = viewLifecycleOwner.lifecycleScope.launch {
             val response = try {
-                matchServer(candidates, countryCode, { withContext(Dispatchers.IO) { pinger.ping(it) } })
+                publicServers.match(countryCode)
             } finally {
                 progressDialog.dismiss()
             }
@@ -204,26 +195,23 @@ class PublicServerListFragment :
         }
     }
 
-    private fun showSortDialog(adapter: PublicServerAdapter) {
+    private fun showSortDialog() {
         MaterialAlertDialogBuilder(requireActivity())
             .setTitle(R.string.sortBy)
             .setItems(arrayOf(getString(R.string.name), getString(R.string.country))) { _, which ->
                 when (which) {
-                    SORT_NAME -> adapter.sort { lhs, rhs -> lhs.name.compareTo(rhs.name) }
-                    SORT_COUNTRY -> adapter.sort(COUNTRY_ORDER)
+                    SORT_NAME -> publicServers.sort(PublicServersViewModel.Order.NAME)
+                    SORT_COUNTRY -> publicServers.sort(PublicServersViewModel.Order.COUNTRY)
                 }
             }
             .show()
     }
 
-    private fun showFilterDialog(adapter: PublicServerAdapter) {
+    private fun showFilterDialog() {
         val dialog = DialogServerSearchBinding.inflate(layoutInflater)
         val nameText = dialog.serverSearchName
         val countryText = dialog.serverSearchCountry
-        fun applyFilter() = adapter.filter(
-            nameText.text.toString().uppercase(Locale.US),
-            countryText.text.toString().uppercase(Locale.US),
-        )
+        fun applyFilter() = publicServers.filter(nameText.text.toString(), countryText.text.toString())
 
         val alertDialog = MaterialAlertDialogBuilder(requireActivity())
             .setTitle(R.string.search)
@@ -257,13 +245,5 @@ class PublicServerListFragment :
     private companion object {
         const val SORT_NAME = 0
         const val SORT_COUNTRY = 1
-
-        val COUNTRY_ORDER = Comparator<PublicServer> { lhs, rhs ->
-            when {
-                rhs.country == null -> -1
-                lhs.country == null -> 1
-                else -> lhs.country.compareTo(rhs.country)
-            }
-        }
     }
 }

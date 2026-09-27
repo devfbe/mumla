@@ -31,12 +31,13 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.launch
 import se.lublin.humla.model.Server
 import se.lublin.mumla.R
 import se.lublin.mumla.databinding.FragmentServerListBinding
-import se.lublin.mumla.db.MumlaRepository
+import se.lublin.mumla.util.appViewModels
 import se.lublin.mumla.ui.ServerRequest
 import se.lublin.mumla.ui.ConnectRequests
 import se.lublin.mumla.ui.showConfirmDialog
@@ -49,8 +50,7 @@ class FavouriteServerListFragment :
     MenuProvider {
 
     private val connectRequests: ConnectRequests by activityViewModels()
-    private val repository get() = MumlaRepository.get(requireContext())
-    private var serverAdapter: FavouriteServerAdapter? = null
+    private val favourites by appViewModels(FavouriteServersViewModel::create)
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
         FragmentServerListBinding.inflate(inflater, container, false).root
@@ -59,7 +59,7 @@ class FavouriteServerListFragment :
         super.onViewCreated(view, savedInstanceState)
         val binding = FragmentServerListBinding.bind(view)
         setUpServerGrid(binding.serverListGrid)
-        val adapter = FavouriteServerAdapter(requireContext(), this, viewLifecycleOwner.lifecycleScope) {
+        val adapter = FavouriteServerAdapter(this, favourites.pings) {
             connectRequests.request(ServerRequest.Favourite(it))
         }
         // As the platform grid's empty view: shown until there are servers to show.
@@ -74,18 +74,19 @@ class FavouriteServerListFragment :
         })
         binding.serverListGridEmpty.isVisible = true
         binding.serverListGrid.adapter = adapter
-        serverAdapter = adapter
         requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
-    }
-
-    override fun onDestroyView() {
-        serverAdapter = null
-        super.onDestroyView()
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { favourites.pings.replies.collect(adapter::setReplies) }
+                favourites.servers.collect { it?.let(adapter::submitList) }
+            }
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        updateServers()
+        // Edits are made elsewhere and stored by the activity.
+        favourites.reload()
     }
 
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -120,15 +121,7 @@ class FavouriteServerListFragment :
 
     override fun deleteServer(server: Server) {
         requireContext().showConfirmDialog(getString(R.string.confirm_delete_server), R.string.delete) {
-            serverAdapter?.let { adapter -> adapter.submitList(adapter.currentList - server) }
-            lifecycleScope.launch { repository.io { removeServer(server) } }
-        }
-    }
-
-    private fun updateServers() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            val servers = repository.io { getServers() }
-            serverAdapter?.submitList(servers)
+            favourites.delete(server)
         }
     }
 }

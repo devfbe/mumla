@@ -17,7 +17,6 @@
 
 package se.lublin.mumla.servers
 
-import android.content.Context
 import android.graphics.Rect
 import android.view.LayoutInflater
 import android.view.MenuItem
@@ -32,33 +31,30 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import se.lublin.humla.model.Server
 import se.lublin.mumla.R
-import se.lublin.mumla.Settings
 
 /**
- * Server cards with a live ping status. Each address is pinged at most once at a time, on a shared
- * bounded dispatcher, and only while [scope] is active and [pingsAllowed] says so (never over Tor,
- * as the UDP ping would bypass it). A tapped card goes to [onServerClick]. Main thread only.
+ * Server cards with the ping status of [pings]: a card without a reply asks for one while pings are
+ * allowed, and [setReplies] repaints the cards whose reply arrived. A tapped card goes to
+ * [onServerClick]. Main thread only.
  */
-@Suppress("LongParameterList") // The ping collaborators are injectable for tests.
 abstract class ServerAdapter<E : Server>(
-    context: Context,
-    private val scope: CoroutineScope,
+    private val pings: ServerPings,
     private val onServerClick: (E) -> Unit,
-    private val pinger: ServerPinger = ServerPinger(),
-    private val pingDispatcher: CoroutineDispatcher = PING_DISPATCHER,
-    private val pingsAllowed: () -> Boolean = { !Settings.getInstance(context).isTorEnabled },
 ) : ListAdapter<E, ServerAdapter.ServerViewHolder>(ServerDiff()) {
 
-    /** Ping results by address: servers at the same address share one. */
-    private val responses = HashMap<Address, ServerInfoResponse>()
-    private val inFlight = HashSet<Address>()
+    private var replies: Map<ServerAddress, ServerInfoResponse> = emptyMap()
+
+    /** Repaints the cards whose address has a new reply. */
+    fun setReplies(replies: Map<ServerAddress, ServerInfoResponse>) {
+        val previous = this.replies
+        this.replies = replies
+        currentList.forEachIndexed { index, server ->
+            val address = server.address
+            if (previous[address] !== replies[address]) notifyItemChanged(index)
+        }
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ServerViewHolder =
         ServerViewHolder(LayoutInflater.from(parent.context).inflate(rowLayout, parent, false))
@@ -70,14 +66,14 @@ abstract class ServerAdapter<E : Server>(
     override fun onBindViewHolder(holder: ServerViewHolder, position: Int) {
         val server = getItem(position)
         val context = holder.itemView.context
-        val response = responses[server.address]
+        val response = replies[server.address]
         holder.itemView.setOnClickListener { onServerClick(server) }
         holder.name.text = server.name
         holder.user?.text = server.username
         holder.address?.text = server.host + if (server.port == 0) "" else ":${server.port}"
         holder.more.setOnClickListener { onServerOptionsClick(server, it) }
 
-        val pinging = response == null && pingsAllowed()
+        val pinging = response == null && pings.allowed()
         val infoVisibility = if (pinging) View.INVISIBLE else View.VISIBLE
         holder.version.visibility = infoVisibility
         holder.users.visibility = infoVisibility
@@ -85,7 +81,7 @@ abstract class ServerAdapter<E : Server>(
         holder.progress.visibility = if (pinging) View.VISIBLE else View.INVISIBLE
 
         when {
-            pinging -> requestPing(server)
+            pinging -> pings.request(server)
             response == null -> holder.showStatus(NO_STATUS)
             response.isDummy -> holder.showStatus(context.getString(R.string.offline))
             else -> {
@@ -99,17 +95,6 @@ abstract class ServerAdapter<E : Server>(
 
     /** Binds what a subclass's row shows beyond the common card. */
     protected open fun onBindServer(holder: ServerViewHolder, server: E) = Unit
-
-    private fun requestPing(server: E) {
-        val address = server.address
-        if (!inFlight.add(address)) return
-        scope.launch {
-            val result = withContext(pingDispatcher) { pinger.ping(server) }
-            inFlight.remove(address)
-            responses[address] = result
-            currentList.forEachIndexed { index, shown -> if (shown.address == address) notifyItemChanged(index) }
-        }
-    }
 
     private fun onServerOptionsClick(server: E, anchor: View) {
         PopupMenu(anchor.context, anchor).apply {
@@ -142,10 +127,6 @@ abstract class ServerAdapter<E : Server>(
         }
     }
 
-    private data class Address(val host: String, val port: Int)
-
-    private val Server.address get() = Address(host, port)
-
     /** The same object is the same row; a stored server is also the same row after a reload. */
     private class ServerDiff<E : Server> : DiffUtil.ItemCallback<E>() {
         override fun areItemsTheSame(oldItem: E, newItem: E): Boolean =
@@ -156,13 +137,8 @@ abstract class ServerAdapter<E : Server>(
                 oldItem.username == newItem.username
     }
 
-    companion object {
-        private const val MAX_CONCURRENT_PINGS = 16
-        private const val NO_STATUS = "\u2013"
-
-        /** Shared by every server list, so all of them together never exceed the ping bound. */
-        private val PING_DISPATCHER: CoroutineDispatcher =
-            Dispatchers.IO.limitedParallelism(MAX_CONCURRENT_PINGS)
+    private companion object {
+        const val NO_STATUS = "\u2013"
     }
 }
 

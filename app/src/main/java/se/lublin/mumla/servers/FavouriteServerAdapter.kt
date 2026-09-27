@@ -17,19 +17,16 @@
 
 package se.lublin.mumla.servers
 
-import android.content.Context
 import android.view.MenuItem
-import kotlinx.coroutines.CoroutineScope
 import se.lublin.humla.model.Server
 import se.lublin.mumla.R
 
 /** The favourite servers' cards, with edit, share and delete in their menu. */
 class FavouriteServerAdapter(
-    context: Context,
     private val listener: FavouriteServerAdapterMenuListener,
-    scope: CoroutineScope,
+    pings: ServerPings,
     onServerClick: (Server) -> Unit,
-) : ServerAdapter<Server>(context, scope, onServerClick) {
+) : ServerAdapter<Server>(pings, onServerClick) {
 
     override val rowLayout: Int get() = R.layout.server_list_row
 
