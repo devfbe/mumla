@@ -349,7 +349,7 @@ class ChannelFragment :
             settings.inputMethod == Settings.ARRAY_INPUT_METHOD_PTT
         binding.pushtotalkView.visibility = if (showPttButton) View.VISIBLE else View.GONE
 
-        val showHoldButton = shownWhisperTarget != null && settings.isHoldToWhisper
+        val showHoldButton = !muted && shownWhisperTarget != null && settings.isHoldToWhisper
         binding.targetPanelHold.visibility = if (showHoldButton) View.VISIBLE else View.GONE
     }
 
