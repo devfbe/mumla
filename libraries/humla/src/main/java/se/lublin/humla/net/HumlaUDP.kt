@@ -50,7 +50,7 @@ private const val RESYNC_AFTER_MICROS = 5_000_000
  * @param scope The connection's scope; its dispatcher delivers the callbacks.
  * @param socketFactory Creates the datagram socket the loops run on.
  */
-class HumlaUDP(
+internal class HumlaUDP(
     private val cryptState: CryptState,
     private val listener: UDPConnectionListener,
     private val scope: CoroutineScope,

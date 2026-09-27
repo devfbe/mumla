@@ -36,7 +36,7 @@ private const val RNNOISE = "RNNoise noise suppression"
  * @param farEndSink must be fed frames of exactly [farEndFrameSize] samples (use [FarEndFrameChunker]).
  * @param farEndFrameSize as reported by the APM, 0 without a sink.
  */
-class CaptureChain(
+internal class CaptureChain(
     val preprocessor: CapturePreprocessor,
     val farEndSink: FarEndSink?,
     val farEndFrameSize: Int = 0,
@@ -47,7 +47,7 @@ class CaptureChain(
  * RNNoise. The APIs are factories because touching the native objects loads the library; a missing
  * `.so` becomes a skipped stage and a [log] line.
  */
-class CapturePreprocessorFactory(
+internal class CapturePreprocessorFactory(
     private val speexApi: () -> SpeexPreprocessApi = { SpeexPreprocessNative },
     private val rnnoiseApi: () -> RnnoiseApi = { RnnoiseNative },
     private val apmApi: () -> WebRtcApmApi = { WebRtcApmNative },

@@ -101,7 +101,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * the platform, replaceable for tests.
  */
 @Suppress("TooManyFunctions", "LongParameterList") // The protocol's whole client API; the platform seams.
-class HumlaSession internal constructor(
+public class HumlaSession internal constructor(
     private val context: Context,
     config: SessionConfig,
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
@@ -117,7 +117,7 @@ class HumlaSession internal constructor(
     reconnectPolicy: ReconnectPolicy = ReconnectPolicy(),
 ) : IHumlaSession {
 
-    constructor(context: Context, config: SessionConfig) : this(context, config, Handler(Looper.getMainLooper()))
+    public constructor(context: Context, config: SessionConfig) : this(context, config, Handler(Looper.getMainLooper()))
 
     override var config: SessionConfig = config
         private set
@@ -669,7 +669,7 @@ class HumlaSession internal constructor(
         }
     }
 
-    companion object {
+    public companion object {
         private const val TAG = "HumlaSession"
         private val dnsLookupInstalled = AtomicBoolean()
 

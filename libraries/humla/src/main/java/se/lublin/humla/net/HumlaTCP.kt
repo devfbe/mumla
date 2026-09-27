@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLSocket
 
-class TcpFrame(val type: HumlaTCPMessageType, val data: ByteArray)
+internal class TcpFrame(val type: HumlaTCPMessageType, val data: ByteArray)
 
 /**
  * The TLS/TCP connection to a Mumble server, framing protobuf messages. Single-use.
@@ -50,7 +50,7 @@ class TcpFrame(val type: HumlaTCPMessageType, val data: ByteArray)
  * onTCPConnectionDisconnect is delivered exactly once and is terminal: no later callback is
  * delivered (checked at delivery time). Cancelling [scope] closes the socket.
  */
-class HumlaTCP(
+internal class HumlaTCP(
     private val socketFactory: HumlaSSLSocketFactory,
     private val scope: CoroutineScope,
 ) : TcpTransport {

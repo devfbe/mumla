@@ -21,13 +21,13 @@ package se.lublin.humla.audio.capture
  * Preference values are stable on-disk identifiers (see app Settings.kt). Unknown or missing values
  * fall back to [SPEEX], the suppressor older installs were already running.
  */
-enum class NoiseSuppressionMode(val preferenceValue: String) {
+public enum class NoiseSuppressionMode(public val preferenceValue: String) {
     NONE("none"),
     SPEEX("speex"),
     RNNOISE("rnnoise");
 
-    companion object {
-        fun fromPreferenceValue(value: String?): NoiseSuppressionMode =
+    public companion object {
+        public fun fromPreferenceValue(value: String?): NoiseSuppressionMode =
             entries.firstOrNull { it.preferenceValue == value } ?: SPEEX
     }
 }
@@ -36,18 +36,18 @@ enum class NoiseSuppressionMode(val preferenceValue: String) {
  * Which canceller runs: WebRTC's AEC3 or none. The platform `AcousticEchoCanceler` is not offered: in
  * front of AEC3 it would hand it an already-altered echo. Unknown values read as [NONE].
  */
-enum class EchoCancellationMode(val preferenceValue: String) {
+public enum class EchoCancellationMode(public val preferenceValue: String) {
     NONE("none"),
     WEBRTC("webrtc");
 
-    companion object {
-        fun fromPreferenceValue(value: String?): EchoCancellationMode =
+    public companion object {
+        public fun fromPreferenceValue(value: String?): EchoCancellationMode =
             entries.firstOrNull { it.preferenceValue == value } ?: NONE
     }
 }
 
 /** android.media.audiofx effects attached to the AudioRecord session. */
-data class AndroidAudioEffects(
+public data class AndroidAudioEffects(
     val noiseSuppressor: Boolean = false,
     val automaticGainControl: Boolean = false,
 ) {

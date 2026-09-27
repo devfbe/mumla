@@ -21,7 +21,7 @@ package se.lublin.humla.net
  * One voice packet the server sent, decoded from either [UdpProtocol]. Owned and reused by the
  * connection: valid only during the handler call it is passed to.
  */
-class VoicePacket {
+internal class VoicePacket {
     /** The codec; only Opus packets carry the fields below. */
     var codec: HumlaUDPMessageType = HumlaUDPMessageType.UDPVoiceOpus
         internal set

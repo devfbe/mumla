@@ -25,7 +25,7 @@ package se.lublin.humla.audio.native
  * handles are refused, but a handle from another bridge may name a live denoiser that belongs to
  * someone else.
  */
-interface RnnoiseApi {
+internal interface RnnoiseApi {
     /** A new denoiser, or 0 if one could not be allocated. */
     fun create(): Long
 
@@ -51,7 +51,7 @@ interface RnnoiseApi {
  * A handle must not be used from two threads at once. [processFrame] takes no lock; [create] and
  * [destroy] lock and allocate, so keep them off the audio thread.
  */
-object RnnoiseNative : RnnoiseApi {
+internal object RnnoiseNative : RnnoiseApi {
     /** Samples per frame RNNoise is built around: 10 ms at 48 kHz. Not configurable. */
     const val FRAME_SIZE = 480
 

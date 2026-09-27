@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * Like HumlaTCP, every callback, including the terminal one [disconnect] reports, is dispatched on
  * [scope] rather than called inline. [inProtocolContext] tells whether the caller runs there.
  */
-class FakeTcpTransport(
+internal class FakeTcpTransport(
     private val scope: CoroutineScope,
     private val inProtocolContext: () -> Boolean,
 ) : TcpTransport {
@@ -106,7 +106,7 @@ class FakeTcpTransport(
  * so [simulateDatagram] counts the packet the way a successful decrypt would, which makes the
  * [UdpHealthMonitor] decisions that depend on `localGood` reachable.
  */
-class FakeUdpTransport(
+internal class FakeUdpTransport(
     private val scope: CoroutineScope,
     private val listener: HumlaUDP.UDPConnectionListener,
     private val cryptState: CryptState,
@@ -146,7 +146,9 @@ class FakeUdpTransport(
 }
 
 /** [inProtocolContext] tells the fakes whether their caller runs on the protocol context. */
-class FakeTransports(private val inProtocolContext: () -> Boolean = { true }) : HumlaConnection.TransportFactory {
+internal class FakeTransports(
+    private val inProtocolContext: () -> Boolean = { true },
+) : HumlaConnection.TransportFactory {
     val tcps = CopyOnWriteArrayList<FakeTcpTransport>()
     val udps = CopyOnWriteArrayList<FakeUdpTransport>()
 
@@ -162,7 +164,9 @@ class FakeTransports(private val inProtocolContext: () -> Boolean = { true }) : 
 }
 
 /** [onCallbackThread] tells whether a callback runs where the connection's callbacks belong. */
-class RecordingConnectionListener(private val onCallbackThread: () -> Boolean = { true }) : HumlaConnection.Listener {
+internal class RecordingConnectionListener(
+    private val onCallbackThread: () -> Boolean = { true },
+) : HumlaConnection.Listener {
     /**
      * One entry per callback, in delivery order, so tests can check that onConnectionDisconnected
      * is terminal.

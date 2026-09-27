@@ -21,7 +21,7 @@ import kotlin.math.log10
 import kotlin.math.sqrt
 
 /** Monotonic nanosecond clock; a `fun interface` because `() -> Long` boxes on every frame. */
-fun interface NanoClock {
+internal fun interface NanoClock {
     fun nanoTime(): Long
 }
 
@@ -30,7 +30,7 @@ fun interface NanoClock {
  * across gaps inside a word. Call [isVoice] from the capture thread only; [config] may be written
  * from any thread. [clock] may have any origin, hence the `now - deadline < 0` comparison.
  */
-class VoiceActivityDetector(
+internal class VoiceActivityDetector(
     config: VadConfig,
     /** Frame duration in ms; scales [AdaptiveVadTracker]'s time constants. */
     private val frameMs: Float = DEFAULT_FRAME_MS,

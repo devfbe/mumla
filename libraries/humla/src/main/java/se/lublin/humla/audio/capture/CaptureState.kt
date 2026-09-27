@@ -23,7 +23,7 @@ package se.lublin.humla.audio.capture
  * Delivered on the producing thread: [Error] on the capture thread, [Silenced] and [Active] on the
  * platform's recording-callback binder thread. Listeners must be safe for both.
  */
-sealed interface CaptureState {
+internal sealed interface CaptureState {
     /** Capture is running and the platform is letting us hear the microphone. */
     data object Active : CaptureState
 

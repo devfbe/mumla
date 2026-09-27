@@ -25,7 +25,7 @@ import android.os.PowerManager
 import se.lublin.humla.util.HumlaLog
 
 /** Whether a network is up, and a one-shot wait for one. Confined to the session's thread. */
-interface NetworkMonitor {
+internal interface NetworkMonitor {
     val isOnline: Boolean
 
     /** Calls [onAvailable] once, on the session's thread, when a default network is up. Replaces an earlier wait. */
@@ -36,7 +36,7 @@ interface NetworkMonitor {
 }
 
 /** The partial wake lock a session holds from its first synchronization until it ends. */
-interface SessionWakeLock {
+internal interface SessionWakeLock {
     val isHeld: Boolean
 
     fun acquire()
@@ -45,7 +45,7 @@ interface SessionWakeLock {
 }
 
 /** A [NetworkMonitor] over the platform's default network callback, delivered on [handler]. */
-class AndroidNetworkMonitor(
+internal class AndroidNetworkMonitor(
     private val connectivity: ConnectivityManager,
     private val handler: Handler,
 ) : NetworkMonitor {
@@ -90,7 +90,7 @@ class AndroidNetworkMonitor(
 }
 
 /** A partial [PowerManager] wake lock tagged [tag]; reference counted, as the platform's is. */
-class AndroidSessionWakeLock(powerManager: PowerManager, tag: String = "Humla:Session") : SessionWakeLock {
+internal class AndroidSessionWakeLock(powerManager: PowerManager, tag: String = "Humla:Session") : SessionWakeLock {
     private val lock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, tag)
 
     override val isHeld: Boolean get() = lock.isHeld

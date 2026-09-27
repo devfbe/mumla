@@ -23,7 +23,7 @@ import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.PreferredAudioDevice
 
 /** When the microphone is sent. */
-enum class TransmitMode {
+public enum class TransmitMode {
     VOICE_ACTIVITY,
     PUSH_TO_TALK,
     CONTINUOUS,
@@ -34,7 +34,7 @@ enum class TransmitMode {
  * other fields reach live objects (input mode, router) or are resolved in [toAudioConfig], so a
  * change to one of them rebuilds the pipeline only when the resolved value changes.
  */
-data class AudioSettings(
+public data class AudioSettings(
     val transmitMode: TransmitMode = TransmitMode.VOICE_ACTIVITY,
     val vad: VadConfig = VadConfig.DEFAULT,
     /** Only honoured in push-to-talk. */
@@ -52,7 +52,7 @@ data class AudioSettings(
      * user's override for that kind of device, else the kind's default; with no route there is no
      * canceller, since nothing plays that could echo.
      */
-    fun toAudioConfig(routedDeviceType: Int?): AudioConfig {
+    internal fun toAudioConfig(routedDeviceType: Int?): AudioConfig {
         val echo = routedDeviceType?.let(AudioDeviceCategory::of)
             ?.let { echoCancellationOverrides[it] ?: it.echoCancellationByDefault } == true
         return AudioConfig(

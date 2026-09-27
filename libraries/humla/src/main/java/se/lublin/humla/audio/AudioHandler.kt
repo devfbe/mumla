@@ -46,7 +46,7 @@ import se.lublin.humla.util.HumlaLogger
  *   sending as somebody else.
  * @throws AudioInitializationException without the RECORD_AUDIO permission.
  */
-class AudioHandler(
+internal class AudioHandler(
     host: AudioHost,
     config: AudioConfig,
     private val params: AudioSessionParams,

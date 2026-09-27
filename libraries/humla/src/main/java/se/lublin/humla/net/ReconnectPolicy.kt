@@ -8,7 +8,7 @@ private const val MAX_SHIFT = 30
  * plus up to [maxJitterFraction] of the delay as jitter, for at most [maxAttempts] attempts.
  * The caller resets the attempt counter when connectivity changes or a session succeeds.
  */
-class ReconnectPolicy(
+internal class ReconnectPolicy(
     val baseDelayMillis: Long = 2_000L,
     val maxDelayMillis: Long = 30_000L,
     val maxAttempts: Int = 10,

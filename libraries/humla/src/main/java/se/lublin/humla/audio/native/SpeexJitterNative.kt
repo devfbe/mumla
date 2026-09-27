@@ -22,7 +22,7 @@ package se.lublin.humla.audio.native
  * copy). [get] writes the packet into `out` and fills `meta` with
  * `[len, timestamp, span, sequence, userData]`; it returns a `JITTER_BUFFER_*` status.
  */
-interface SpeexJitterApi {
+internal interface SpeexJitterApi {
     fun init(stepSize: Int): Long
     fun destroy(handle: Long)
     fun put(handle: Long, data: ByteArray, len: Int, timestamp: Int, span: Int, sequence: Int, userData: Int)
@@ -41,7 +41,7 @@ interface SpeexJitterApi {
     fun updateDelay(handle: Long): Int
 }
 
-object SpeexJitterNative : SpeexJitterApi {
+internal object SpeexJitterNative : SpeexJitterApi {
     // The first five are statuses [get] returns, the last three are [ctl] requests; only the
     // requests are on the bridge's allow list.
     const val JITTER_BUFFER_OK = 0

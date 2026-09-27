@@ -26,7 +26,7 @@ private const val MS_PER_SECOND = 1000f
  * rises instantly while transmitting and decays otherwise. Sets a threshold, never gain, so it
  * cascades with AGC2. Capture thread only.
  */
-class AdaptiveVadTracker(
+internal class AdaptiveVadTracker(
     initialFloorDbfs: Float = DEFAULT_FLOOR_DBFS,
     private val floorRiseDbPerSecond: Float = FLOOR_RISE_DB_PER_SECOND,
     private val floorFallDbPerSecond: Float = FLOOR_FALL_DB_PER_SECOND,

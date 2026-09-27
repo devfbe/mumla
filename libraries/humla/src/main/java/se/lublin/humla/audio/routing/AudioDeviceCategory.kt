@@ -24,12 +24,12 @@ import android.media.AudioDeviceInfo
  * default is decided per, and the unit a user's override of it is remembered per. Stable names -
  * the app stores overrides under them.
  */
-enum class AudioDeviceCategory(
+public enum class AudioDeviceCategory(
     /**
      * Whether the canceller runs when the user has not said otherwise: where the phone plays out
      * loud and its own microphone hears it, not on a headset, where it only costs quality.
      */
-    val echoCancellationByDefault: Boolean,
+    public val echoCancellationByDefault: Boolean,
 ) {
     SPEAKER(true),
     EARPIECE(true),
@@ -37,8 +37,8 @@ enum class AudioDeviceCategory(
     WIRED(false),
     OTHER(false);
 
-    companion object {
-        fun of(type: Int): AudioDeviceCategory = when (type) {
+    public companion object {
+        public fun of(type: Int): AudioDeviceCategory = when (type) {
             AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> SPEAKER
             AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> EARPIECE
             in AudioRouter.BLUETOOTH -> BLUETOOTH

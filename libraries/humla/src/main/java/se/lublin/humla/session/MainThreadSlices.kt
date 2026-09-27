@@ -30,7 +30,7 @@ private const val MAX_EVENTS_PER_SLICE = 64
  * burst (a large server's channel tree, say) cannot stall the UI. Collect on the main thread.
  * Items emitted one at a time from the main thread stay inline.
  */
-fun <T> Flow<T>.inMainThreadSlices(maxPerSlice: Int = MAX_EVENTS_PER_SLICE): Flow<T> = flow {
+public fun <T> Flow<T>.inMainThreadSlices(maxPerSlice: Int = MAX_EVENTS_PER_SLICE): Flow<T> = flow {
     require(maxPerSlice > 0) { "maxPerSlice must be positive, was $maxPerSlice" }
     val handler = Handler(Looper.getMainLooper())
     var delivered = 0

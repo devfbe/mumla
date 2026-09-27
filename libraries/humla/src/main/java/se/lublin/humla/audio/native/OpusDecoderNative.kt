@@ -21,7 +21,7 @@ package se.lublin.humla.audio.native
  * libopus decoder and packet inspection. State handles are opaque; 0 means creation failed.
  * [decodeFloat] decodes `len` bytes of `data` from `offset`; `data == null` requests PLC.
  */
-interface OpusDecoderApi {
+internal interface OpusDecoderApi {
     fun create(sampleRate: Int, channels: Int, error: IntArray): Long
     fun decodeFloat(
         state: Long,
@@ -37,7 +37,7 @@ interface OpusDecoderApi {
     fun packetGetSamplesPerFrame(packet: ByteArray, sampleRate: Int): Int
 }
 
-object OpusDecoderNative : OpusDecoderApi {
+internal object OpusDecoderNative : OpusDecoderApi {
     init {
         HumlaNativeLibrary.load()
     }

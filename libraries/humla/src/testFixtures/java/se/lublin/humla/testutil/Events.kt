@@ -31,16 +31,16 @@ import java.util.concurrent.CopyOnWriteArrayList
  * Collects [flow] on the main thread from the moment it is built, so events emitted on the main
  * thread are handled before the emitting call returns. Build it on the main thread.
  */
-fun <T> collectOnMain(flow: Flow<T>, block: (T) -> Unit): Job =
+public fun <T> collectOnMain(flow: Flow<T>, block: (T) -> Unit): Job =
     CoroutineScope(Dispatchers.Main.immediate).launch(start = CoroutineStart.UNDISPATCHED) {
         flow.collect { block(it) }
     }
 
 /** Calls [block] for each of this session's events; see [collectOnMain]. Cancel the job to stop. */
-fun IHumlaSession.onEvents(block: (HumlaEvent) -> Unit): Job = collectOnMain(events, block)
+internal fun IHumlaSession.onEvents(block: (HumlaEvent) -> Unit): Job = collectOnMain(events, block)
 
 /** Records this session's events; see [collectOnMain]. */
-class EventRecorder(session: IHumlaSession) {
+internal class EventRecorder(session: IHumlaSession) {
     val events: MutableList<HumlaEvent> = CopyOnWriteArrayList()
     val job: Job = session.onEvents { events += it }
 

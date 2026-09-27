@@ -29,13 +29,13 @@ import java.util.concurrent.Executor
  * by, its [AudioDeviceInfo] [type], its product [name] and its [address] (each empty if unknown,
  * never null). The id changes whenever the device reconnects; the address does not.
  */
-data class CommunicationDevice(val id: Int, val type: Int, val name: String, val address: String = "")
+public data class CommunicationDevice(val id: Int, val type: Int, val name: String, val address: String = "")
 
 /**
  * What [AndroidCommunicationDevices.available] lists, for showing without a session: reads only,
  * never routes or changes the audio mode. Empty if the platform refuses.
  */
-fun listCommunicationDevices(audioManager: AudioManager): List<CommunicationDevice> =
+public fun listCommunicationDevices(audioManager: AudioManager): List<CommunicationDevice> =
     try {
         audioManager.availableCommunicationDevices.map { it.toCommunicationDevice() }
     } catch (e: SecurityException) {
@@ -47,7 +47,7 @@ private fun AudioDeviceInfo.toCommunicationDevice() =
     CommunicationDevice(id, type, productName?.toString().orEmpty(), address.orEmpty())
 
 /** The subset of `AudioManager`'s communication-device API (API 31) that routing needs. */
-interface CommunicationDevices {
+internal interface CommunicationDevices {
     fun available(): List<CommunicationDevice>
 
     /** Routes voice to the device; false if the platform refused or the id is gone. */
@@ -72,7 +72,7 @@ interface CommunicationDevices {
  * require `BLUETOOTH_CONNECT` for these calls, but some OEMs enforce more, so a [SecurityException]
  * yields the "no headset" value and [onSecurityDenial] is invoked once per instance.
  */
-class AndroidCommunicationDevices(
+internal class AndroidCommunicationDevices(
     private val audioManager: AudioManager,
     private val mainHandler: Handler,
     private val onSecurityDenial: (SecurityException) -> Unit,

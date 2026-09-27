@@ -24,7 +24,7 @@ import javax.crypto.spec.SecretKeySpec
  * OCB2-AES128 for the voice channel, after Mumble's `CryptStateOCB2`. The OCB patent is licensed
  * free of charge for OSI-certified open source software (http://www.cs.ucdavis.edu/~rogaway/ocb/license.htm).
  */
-class CryptState {
+internal class CryptState {
     private var encryptIv = ByteArray(AES_BLOCK_SIZE)
     private var decryptIv = ByteArray(AES_BLOCK_SIZE)
     private val decryptHistory = ByteArray(IV_RANGE)

@@ -18,7 +18,7 @@
 package se.lublin.humla.model
 
 /** The 30 whisper target slots Mumble's 5-bit voice target id leaves, tracked in a bit vector. */
-class WhisperTargetList {
+internal class WhisperTargetList {
     private val activeTargets = arrayOfNulls<WhisperTarget>(TARGET_MAX - TARGET_MIN + 1)
     private var takenIds = 0
 

@@ -34,7 +34,7 @@ import se.lublin.humla.util.HumlaLogger
  * Assembles the capture chain for `AudioHandler`. Echo cancellation has two ends, the near-end stage
  * and [Wiring.farEnd] fed by `AudioOutput` on the playback thread: both or neither.
  */
-object CaptureWiring {
+internal object CaptureWiring {
     private const val TAG = "CaptureWiring"
 
     /** @param farEnd null whenever the WebRTC canceller is not in the chain. */

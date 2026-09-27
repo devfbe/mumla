@@ -27,7 +27,7 @@ import se.lublin.humla.net.VoicePacketHandler
 import se.lublin.humla.util.HumlaLogger
 
 /** A running audio pipeline as [AudioController] sees it (real: AudioHandler; tests: fakes). */
-interface ManagedAudio {
+internal interface ManagedAudio {
     val tcpHandler: TcpMessageHandler
     val voiceHandler: VoicePacketHandler
     val currentBandwidth: Int
@@ -41,7 +41,7 @@ interface ManagedAudio {
 }
 
 /** Per-session inputs that only exist after ServerSync. */
-data class AudioSessionParams(
+internal data class AudioSessionParams(
     val self: UserState,
     val maxBandwidth: Int,
     val codec: HumlaUDPMessageType?,
@@ -52,14 +52,14 @@ data class AudioSessionParams(
 )
 
 /** What every pipeline of a session is built with, across its rebuilds. */
-class AudioHost(
+internal class AudioHost(
     val context: Context,
     val logger: HumlaLogger,
     val encodeListener: AudioHandler.AudioEncodeListener,
     val outputListener: AudioOutput.AudioOutputListener,
 )
 
-interface AudioHandlerFactory {
+internal interface AudioHandlerFactory {
     fun create(
         host: AudioHost,
         config: AudioConfig,
@@ -68,13 +68,13 @@ interface AudioHandlerFactory {
 }
 
 /** Builds and starts the real [AudioHandler]. */
-object DefaultAudioHandlerFactory : AudioHandlerFactory {
+internal object DefaultAudioHandlerFactory : AudioHandlerFactory {
     override fun create(host: AudioHost, config: AudioConfig, params: AudioSessionParams): ManagedAudio =
         AudioHandlerAdapter(AudioHandler(host, config, params).apply { start() })
 }
 
 /** Dresses an [AudioHandler] as a [ManagedAudio]. */
-class AudioHandlerAdapter(private val handler: AudioHandler) : ManagedAudio {
+internal class AudioHandlerAdapter(private val handler: AudioHandler) : ManagedAudio {
     override val tcpHandler: TcpMessageHandler get() = handler
     override val voiceHandler: VoicePacketHandler get() = handler
     override val currentBandwidth: Int get() = handler.currentBandwidth

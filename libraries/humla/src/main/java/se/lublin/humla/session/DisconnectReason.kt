@@ -22,31 +22,31 @@ import se.lublin.humla.protobuf.Mumble
 import java.security.cert.X509Certificate
 
 /** Why a connection ended without the user asking for it. */
-sealed interface DisconnectReason {
+public sealed interface DisconnectReason {
     /** The server refused the connection; [message] is its own text, possibly empty. */
-    data class Rejected(val type: RejectType, val message: String) : DisconnectReason
+    public data class Rejected(val type: RejectType, val message: String) : DisconnectReason
 
     /** [actor] (null if unknown) kicked, or with [banned] banned, the local user. */
-    data class Kicked(val reason: String, val actor: String?, val banned: Boolean) : DisconnectReason
+    public data class Kicked(val reason: String, val actor: String?, val banned: Boolean) : DisconnectReason
 
     /** The server's certificate chain is not trusted. */
-    data class TlsUntrusted(val chain: List<X509Certificate>) : DisconnectReason
+    public data class TlsUntrusted(val chain: List<X509Certificate>) : DisconnectReason
 
     /**
      * The server presented a certificate that differs from the one pinned for its host, and the
      * system does not trust it either. Possibly an attack; never accept it silently.
      */
-    data class TlsCertificateChanged(val chain: List<X509Certificate>) : DisconnectReason
+    public data class TlsCertificateChanged(val chain: List<X509Certificate>) : DisconnectReason
 
     /** The link failed: refused, reset or timed out. The only reason an automatic reconnect retries. */
-    data class Network(val message: String, val cause: Throwable?) : DisconnectReason
+    public data class Network(val message: String, val cause: Throwable?) : DisconnectReason
 
     /** Anything else, such as an unreadable client certificate or a protocol error. */
-    data class Failed(val message: String, val cause: Throwable?) : DisconnectReason
+    public data class Failed(val message: String, val cause: Throwable?) : DisconnectReason
 }
 
 /** The server's reason for a [DisconnectReason.Rejected]. */
-enum class RejectType {
+public enum class RejectType {
     UNKNOWN,
     WRONG_VERSION,
     INVALID_USERNAME,

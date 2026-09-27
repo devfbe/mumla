@@ -31,7 +31,7 @@ import android.media.AudioDeviceInfo
  * new decision, so the router doesn't fight the dialler during a call. Nothing touches the platform
  * before [engage], so no SCO link is held open without a voice session.
  */
-class AudioRouter(
+internal class AudioRouter(
     private val devices: CommunicationDevices,
     private val listener: Listener,
 ) {

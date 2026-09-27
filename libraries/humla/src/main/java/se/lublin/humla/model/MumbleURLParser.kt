@@ -20,7 +20,7 @@ import se.lublin.humla.util.Constants
 import java.net.MalformedURLException
 
 /** Parses `mumble://` URLs (https://wiki.mumble.info/wiki/Mumble_URL). */
-object MumbleURLParser {
+public object MumbleURLParser {
     private val URL_PATTERN =
         Regex("mumble://((?<user>[^:]+)?(:(?<password>.+?))?@)?(?<host>.+?)(:(?<port>[0-9]+?))?/")
     private const val MAX_PORT = 65535
@@ -29,7 +29,7 @@ object MumbleURLParser {
      * @return a server with the user, password, host and port of [url].
      * @throws MalformedURLException if the URL is null, cannot be parsed or has a port outside 1..65535.
      */
-    fun parseURL(url: String?): Server {
+    public fun parseURL(url: String?): Server {
         if (url == null) throw MalformedURLException("null URL")
         val groups = (URL_PATTERN.find(url) ?: throw MalformedURLException()).groups
         val port = groups["port"]?.value?.let(::parsePort) ?: Constants.DEFAULT_PORT

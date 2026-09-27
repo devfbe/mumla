@@ -8,18 +8,18 @@ package se.lublin.humla.session
  * Every state except [Disconnected] keeps the foreground notification, the partial wake lock,
  * the route the user chose and the user's mute/deafen state.
  */
-sealed interface SessionState {
+public sealed interface SessionState {
     /** No connection. [reason] is why the last one ended, or null if it never started or ended on request. */
-    data class Disconnected(val reason: DisconnectReason? = null) : SessionState
+    public data class Disconnected(val reason: DisconnectReason? = null) : SessionState
 
     /** A user-initiated connection attempt is in progress. */
-    data object Connecting : SessionState
+    public data object Connecting : SessionState
 
     /** ServerSync has been received; the session is usable. */
-    data object Connected : SessionState
+    public data object Connected : SessionState
 
     /** The connection dropped; an automatic reconnect fires in [reconnectInMillis]. */
-    data class ConnectionLost(
+    public data class ConnectionLost(
         val reconnectInMillis: Long,
         val attempt: Int,
         val reason: DisconnectReason?,
@@ -30,5 +30,5 @@ sealed interface SessionState {
      * [ConnectionLost] state that preceded it, so cancelling here surfaces the same reason as
      * cancelling one state earlier would.
      */
-    data class Reconnecting(val reason: DisconnectReason?) : SessionState
+    public data class Reconnecting(val reason: DisconnectReason?) : SessionState
 }

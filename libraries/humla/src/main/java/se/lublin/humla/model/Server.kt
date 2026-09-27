@@ -21,7 +21,7 @@ package se.lublin.humla.model
  * A server the user can connect to, as entered or stored. [port] 0 means "look up the
  * `_mumble._tcp` SRV record"; `ServerResolver` turns it into the endpoint to connect to.
  */
-data class Server(
+public data class Server(
     /** The database id, or [NOT_SAVED]. */
     val id: Long,
     /** The name the user gave it; may be empty. */
@@ -40,7 +40,7 @@ data class Server(
     /** Kept out of logs and crash reports. */
     override fun toString(): String = "Server(id=$id, label=$label, host=$host, port=$port, username=$username)"
 
-    companion object {
-        const val NOT_SAVED = -1L
+    public companion object {
+        public const val NOT_SAVED: Long = -1L
     }
 }

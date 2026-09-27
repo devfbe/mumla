@@ -28,7 +28,7 @@ import android.media.MediaRecorder
  * fixed low capture latency. Downside: it also enables the device's own pre-processing, which then
  * runs in front of ours.
  */
-object AudioSourcePolicy {
+internal object AudioSourcePolicy {
     fun needsCommunicationMode(effects: AndroidAudioEffects, echo: EchoCancellationMode): Boolean =
         effects.any || echo != EchoCancellationMode.NONE
 

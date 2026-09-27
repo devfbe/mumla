@@ -35,7 +35,7 @@ import se.lublin.humla.util.HumlaLog
  * only writers of [thread]. The capture thread never takes this monitor and [listener] is called
  * outside it, so the bounded join in [stopRecording] cannot deadlock against the loop.
  */
-class AudioInput(
+internal class AudioInput(
     private val listener: AudioInputListener,
     private val source: PcmCaptureSource,
     private val stateListener: ((CaptureState) -> Unit)? = null,

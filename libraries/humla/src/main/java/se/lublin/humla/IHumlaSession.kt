@@ -17,59 +17,59 @@ import se.lublin.humla.session.inMainThreadSlices
  * [model], what happens [events]; [actions] and [audio] act on it. Nothing here throws while
  * disconnected. Main thread, except for collecting the flows.
  */
-interface IHumlaSession : AutoCloseable {
+public interface IHumlaSession : AutoCloseable {
     /** Whether the session is connected, and why it is not. */
-    val state: StateFlow<SessionState>
+    public val state: StateFlow<SessionState>
 
     /**
      * What happens in the session, emitted from any thread. There is no replay: collect before
      * acting on a result. Collect on the main thread through [inMainThreadSlices] to keep the UI
      * responsive during bursts.
      */
-    val events: SharedFlow<HumlaEvent>
+    public val events: SharedFlow<HumlaEvent>
 
     /**
      * The server's channels and users, one immutable snapshot per burst of changes; null without a
      * connection. Collect anywhere.
      */
-    val model: StateFlow<ServerState?>
+    public val model: StateFlow<ServerState?>
 
     /** The talk state of every user who is not silent, by session; updated on the main thread. */
-    val talkStates: StateFlow<Map<Int, TalkState>>
+    public val talkStates: StateFlow<Map<Int, TalkState>>
 
     /** What the synchronized connection knows about its server; null outside of one. */
-    val serverInfo: ServerInfo?
+    public val serverInfo: ServerInfo?
 
     /** The round trips of the synchronized connection's latest pings; null outside of one. */
-    val latency: Latency?
+    public val latency: Latency?
 
     /** Requests to the server, voice targets and local choices about other users. */
-    val actions: SessionActions
+    public val actions: SessionActions
 
     /** Transmitting and routing. */
-    val audio: AudioControls
+    public val audio: AudioControls
 
     /** The configuration last passed to [configure]. */
-    val config: SessionConfig
+    public val config: SessionConfig
 
     /** The server of this session. */
-    val targetServer: Server?
+    public val targetServer: Server?
 
     /**
      * Replaces the configuration. Audio settings apply live, connection settings on the next
      * connection.
      * @return true if a reconnect is required for the changes to take effect.
      */
-    fun configure(config: SessionConfig): Boolean
+    public fun configure(config: SessionConfig): Boolean
 
     /** Connects to the configured server. Ignored while connecting or connected. */
-    fun connect()
+    public fun connect()
 
     /** Ends the session; a no-op once it has ended. */
-    fun disconnect()
+    public fun disconnect()
 
     /** Gives up an automatic reconnect that is waiting or in flight; the reason stays in [state]. */
-    fun cancelReconnect()
+    public fun cancelReconnect()
 
     /** Disconnects and releases the session's threads and platform callbacks. The session is unusable afterwards. */
     override fun close()

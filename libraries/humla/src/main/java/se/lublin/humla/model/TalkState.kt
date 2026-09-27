@@ -16,7 +16,7 @@
  */
 package se.lublin.humla.model
 
-enum class TalkState {
+public enum class TalkState {
     TALKING,
     SHOUTING,
     PASSIVE,

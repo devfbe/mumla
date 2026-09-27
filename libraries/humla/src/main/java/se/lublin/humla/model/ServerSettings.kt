@@ -4,7 +4,7 @@ package se.lublin.humla.model
 import se.lublin.humla.protobuf.Mumble
 
 /** The server's `ServerConfig`. */
-data class ServerSettings(
+public data class ServerSettings(
     val allowHtml: Boolean,
     val messageLength: Int,
     val imageMessageLength: Int,

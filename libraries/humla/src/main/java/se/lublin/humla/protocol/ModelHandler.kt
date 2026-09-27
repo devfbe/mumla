@@ -35,7 +35,7 @@ import se.lublin.humla.session.HumlaEvent
  *
  * Confined to the connection's protocol context: [onMessage] and [onLocal] run there.
  */
-class ModelHandler(
+internal class ModelHandler(
     initial: ServerState,
     private val events: (HumlaEvent) -> Unit,
     private val publisher: Publisher,

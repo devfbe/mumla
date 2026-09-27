@@ -22,7 +22,7 @@ import se.lublin.humla.audio.native.SpeexResamplerApi
 import se.lublin.humla.audio.native.SpeexResamplerNative
 
 /** Mono sample-rate converter. */
-interface Resampler : AutoCloseable {
+internal interface Resampler : AutoCloseable {
     /**
      * Converts [inputLength] samples of [input] into [output].
      *
@@ -43,7 +43,7 @@ interface Resampler : AutoCloseable {
  * `outLen`, so the preset `outLen[0] = output.size` would otherwise report a full frame and resend
  * the previous frame's stale buffer contents.
  */
-class SpeexResampler(
+internal class SpeexResampler(
     inputRate: Int,
     outputRate: Int,
     quality: Int = DEFAULT_QUALITY,

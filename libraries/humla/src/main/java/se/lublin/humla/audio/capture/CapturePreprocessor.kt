@@ -22,7 +22,7 @@ package se.lublin.humla.audio.capture
  * the capture thread and returns a voice probability in [0, 1], or null for no opinion. Must not
  * block or allocate per frame (GC pauses are audible dropouts).
  */
-interface CapturePreprocessor {
+internal interface CapturePreprocessor {
     fun process(frame: ShortArray): Float?
 
     /** Frees native resources; the instance must not be used afterwards. Idempotent. */
@@ -33,11 +33,11 @@ interface CapturePreprocessor {
  * Far-end entry point of the echo canceller, called on the playback thread with each 10 ms frame
  * about to be played, before the capture frame containing its echo.
  */
-interface FarEndSink {
+internal interface FarEndSink {
     fun analyzeReverseStream(frame: ShortArray)
 }
 
-object NoopPreprocessor : CapturePreprocessor {
+internal object NoopPreprocessor : CapturePreprocessor {
     override fun process(frame: ShortArray): Float? = null
     override fun release() = Unit
 }
@@ -46,7 +46,7 @@ object NoopPreprocessor : CapturePreprocessor {
  * Runs [stages] in order on the same frame; the probability is the last non-null one. Echo
  * cancellation must come first: anything time-varying in front keeps AEC3 from converging.
  */
-class ChainedPreprocessor(stages: List<CapturePreprocessor>) : CapturePreprocessor {
+internal class ChainedPreprocessor(stages: List<CapturePreprocessor>) : CapturePreprocessor {
     // Array + index loop: for-in over a List allocates an Iterator per frame.
     private val stages: Array<CapturePreprocessor> = stages.toTypedArray()
 

@@ -17,20 +17,20 @@
 package se.lublin.humla.net
 
 /** Mumble ACL permission bits, as `PermissionQuery` reports them. */
-object Permissions {
-    const val WRITE = 0x1
-    const val ENTER = 0x4
-    const val MUTE_DEAFEN = 0x10
-    const val MOVE = 0x20
-    const val MAKE_CHANNEL = 0x40
-    const val MAKE_TEMP_CHANNEL = 0x400
-    const val LISTEN = 0x800
+public object Permissions {
+    public const val WRITE: Int = 0x1
+    public const val ENTER: Int = 0x4
+    public const val MUTE_DEAFEN: Int = 0x10
+    public const val MOVE: Int = 0x20
+    public const val MAKE_CHANNEL: Int = 0x40
+    public const val MAKE_TEMP_CHANNEL: Int = 0x400
+    public const val LISTEN: Int = 0x800
 
     // Root channel only
-    const val KICK = 0x10000
-    const val BAN = 0x20000
-    const val REGISTER = 0x40000
-    const val SELF_REGISTER = 0x80000
+    public const val KICK: Int = 0x10000
+    public const val BAN: Int = 0x20000
+    public const val REGISTER: Int = 0x40000
+    public const val SELF_REGISTER: Int = 0x80000
 
-    const val ALL = 0xf07ff
+    internal const val ALL: Int = 0xf07ff
 }

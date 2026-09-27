@@ -33,7 +33,7 @@ import se.lublin.humla.util.HumlaLog
  * [session] is confined to the control thread; [running] is volatile because [isRunning] and
  * [currentBandwidth] may be read from any thread.
  */
-class AudioController(
+internal class AudioController(
     private val host: AudioHost,
     private val factory: AudioHandlerFactory,
     private val onFailed: (String) -> Unit,

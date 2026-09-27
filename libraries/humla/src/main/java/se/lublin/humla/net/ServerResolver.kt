@@ -28,7 +28,7 @@ import se.lublin.humla.util.HumlaLog
 import java.io.IOException
 
 /** Where a connection to a server is opened. */
-data class Endpoint(val host: String, val port: Int)
+public data class Endpoint(val host: String, val port: Int)
 
 /**
  * Turns a [Server] into the [Endpoint] to connect to: its own port if it has one, else the
@@ -36,17 +36,17 @@ data class Endpoint(val host: String, val port: Int)
  *
  * @param srvLookup Answers `_mumble._tcp.<host>`, or null when there is no record. Blocking.
  */
-class ServerResolver internal constructor(
+public class ServerResolver internal constructor(
     private val srvLookup: (String) -> Endpoint?,
     private val io: CoroutineDispatcher,
 ) {
-    constructor() : this(::lookupSrv, Dispatchers.IO)
+    public constructor() : this(::lookupSrv, Dispatchers.IO)
 
     /**
      * Over Tor ([useTor]) no lookup is made: the proxy resolves the host itself, and an SRV query
      * would leak it to the local resolver.
      */
-    suspend fun resolve(server: Server, useTor: Boolean = false): Endpoint {
+    public suspend fun resolve(server: Server, useTor: Boolean = false): Endpoint {
         val host = server.host
         return when {
             server.port != 0 -> Endpoint(host, server.port)

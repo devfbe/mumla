@@ -27,7 +27,7 @@ private const val META_LENGTH = 0
 private const val META_USER_DATA = 4
 
 /** Object wrapper around the speexdsp jitter buffer. */
-class SpeexJitterBuffer(
+internal class SpeexJitterBuffer(
     stepSize: Int,
     private val api: SpeexJitterApi = SpeexJitterNative,
 ) : AutoCloseable {

@@ -34,7 +34,7 @@ package se.lublin.humla.audio.capture
  * @param handle the handle the bridge issued, or 0 if it could not create one.
  * @param what what failed, for the exception message; user-facing text does not belong here.
  */
-abstract class SingleHandleStage protected constructor(handle: Long, what: String) : CapturePreprocessor {
+internal abstract class SingleHandleStage protected constructor(handle: Long, what: String) : CapturePreprocessor {
     /** Covers the capture path, the far-end path and [release]; see the class KDoc. */
     private val lock = Any()
 

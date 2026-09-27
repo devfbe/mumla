@@ -44,7 +44,7 @@ private const val MS_PER_SECOND = 1000L
  * @param farEnd receives every mixed buffer as the AEC3 far-end reference, or null when the
  *               WebRTC canceller is not in the capture chain. Used only by the playback thread.
  */
-class AudioOutput(
+internal class AudioOutput(
     private val listener: AudioOutputListener,
     private val farEnd: FarEndFrameChunker?,
     /** Builds one user's decoder chain; the seam JVM tests use to run without native codecs. */

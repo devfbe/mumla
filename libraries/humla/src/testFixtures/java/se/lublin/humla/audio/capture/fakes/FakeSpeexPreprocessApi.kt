@@ -30,7 +30,7 @@ private const val VOICE_PROBABILITY_PERCENT = 50
  * - requests in [refuse] also answer `-1`, as speex does for controls compiled out of this
  *   fixed-point build (`SET_AGC`, `SET_AGC_TARGET`). Kotlin cannot tell the two apart.
  */
-class FakeSpeexPreprocessApi(
+internal class FakeSpeexPreprocessApi(
     /** What `SPEEX_PREPROCESS_GET_PROB` answers, in percent, unclamped on purpose. */
     var probability: Int = 0,
     private val onRun: (ShortArray) -> Unit = {},
@@ -106,7 +106,7 @@ class FakeSpeexPreprocessApi(
  * [ALLOWED] mirrors `preprocessRequestAllowed` in `jni_speexdsp.cpp`; anything else is refused
  * with -1, which a stage cannot tell apart from an unimplemented request.
  */
-object SpeexPreprocessorRequests {
+internal object SpeexPreprocessorRequests {
     const val SET_DENOISE = SpeexPreprocessNative.SPEEX_PREPROCESS_SET_DENOISE          // 0
     const val SET_AGC = SpeexPreprocessNative.SPEEX_PREPROCESS_SET_AGC                  // 2
     const val SET_VAD = SpeexPreprocessNative.SPEEX_PREPROCESS_SET_VAD                  // 4

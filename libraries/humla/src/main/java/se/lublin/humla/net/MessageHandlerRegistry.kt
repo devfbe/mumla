@@ -25,7 +25,7 @@ package se.lublin.humla.net
  * it must not block: everything behind it - parsing, the model, voice routing - waits on it.
  * A handler removed while a message is being dispatched may still see that dispatch.
  */
-interface MessageHandlerRegistry {
+internal interface MessageHandlerRegistry {
     fun addTcpHandler(handler: TcpMessageHandler)
     fun removeTcpHandler(handler: TcpMessageHandler)
     fun addVoiceHandler(handler: VoicePacketHandler)

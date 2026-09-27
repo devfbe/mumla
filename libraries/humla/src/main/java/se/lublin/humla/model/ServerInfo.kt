@@ -17,7 +17,7 @@
 package se.lublin.humla.model
 
 /** What the connection learned about its server up to ServerSync; replaced if the codec changes. */
-data class ServerInfo(
+public data class ServerInfo(
     /** Where the connection went: the entered host, or the target of its SRV record. */
     val host: String,
     val port: Int,
@@ -34,4 +34,4 @@ data class ServerInfo(
 )
 
 /** The round trips of the latest pings, in microseconds. */
-data class Latency(val tcpMicros: Long, val udpMicros: Long)
+public data class Latency(val tcpMicros: Long, val udpMicros: Long)

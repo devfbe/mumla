@@ -20,7 +20,7 @@ package se.lublin.humla.model
  * A channel as one [ServerState] saw it. A channel named by a user or a subchannel before its own
  * state arrived is a nameless stub until then.
  */
-data class ChannelState(
+public data class ChannelState(
     val id: Int,
     val name: String? = null,
     /** Null for the root, and for a channel whose parent the server has not named yet. */

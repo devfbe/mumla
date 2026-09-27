@@ -53,7 +53,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * context runs on the IO pool for real. Waits poll protocol-side state and drain the main looper
  * explicitly; polling main-thread state would deadlock.
  */
-class HumlaSessionHarness(
+internal class HumlaSessionHarness(
     autoReconnect: Boolean = false,
     reconnectPolicy: ReconnectPolicy = ReconnectPolicy(
         baseDelayMillis = 10L,
@@ -215,7 +215,7 @@ internal fun testSession(
 }
 
 /** Why the session is not connected, in whichever state carries it. */
-val IHumlaSession.reason: DisconnectReason?
+internal val IHumlaSession.reason: DisconnectReason?
     get() = when (val state = state.value) {
         is SessionState.Disconnected -> state.reason
         is SessionState.ConnectionLost -> state.reason
@@ -223,10 +223,10 @@ val IHumlaSession.reason: DisconnectReason?
         SessionState.Connecting, SessionState.Connected -> null
     }
 
-val IHumlaSession.isReconnecting: Boolean
+internal val IHumlaSession.isReconnecting: Boolean
     get() = state.value is SessionState.ConnectionLost || state.value is SessionState.Reconnecting
 
 /** Stores the Bluetooth wish the way the app's preference does: as part of the audio settings. */
-fun IHumlaSession.setBluetoothAutomatic(on: Boolean) {
+internal fun IHumlaSession.setBluetoothAutomatic(on: Boolean) {
     configure(config.copy(audio = config.audio.copy(bluetoothAutomatic = on)))
 }

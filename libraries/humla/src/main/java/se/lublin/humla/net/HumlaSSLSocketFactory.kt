@@ -40,7 +40,7 @@ import javax.net.ssl.X509TrustManager
  * @param peerHost The host name the user entered: certificates are verified against it, it is sent
  *        as SNI and it selects the pins, even when an SRV record points the connection at another host.
  */
-class HumlaSSLSocketFactory @VisibleForTesting internal constructor(
+internal class HumlaSSLSocketFactory @VisibleForTesting internal constructor(
     keystore: KeyStore?,
     keystorePassword: String?,
     trustStore: KeyStore?,

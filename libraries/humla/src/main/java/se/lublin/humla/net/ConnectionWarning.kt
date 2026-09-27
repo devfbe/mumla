@@ -24,7 +24,7 @@ import se.lublin.humla.R
  *
  * The consumer resolves the text, so the protocol needs no Context.
  */
-enum class ConnectionWarning(val messageRes: Int) {
+internal enum class ConnectionWarning(val messageRes: Int) {
     UDP_UNAVAILABLE(R.string.udp_warning_unavailable),
     UDP_SEND_FAILED(R.string.udp_warning_send_failed),
     UDP_RECEIVE_FAILED(R.string.udp_warning_receive_failed),

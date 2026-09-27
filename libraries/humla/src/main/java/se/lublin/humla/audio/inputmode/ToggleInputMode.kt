@@ -25,7 +25,7 @@ import se.lublin.humla.audio.capture.IInputMode
  *
  * [inputOn] is written by the UI thread and read by the capture thread, hence `@Volatile`.
  */
-class ToggleInputMode : IInputMode {
+internal class ToggleInputMode : IInputMode {
     @Volatile
     private var inputOn = false
 

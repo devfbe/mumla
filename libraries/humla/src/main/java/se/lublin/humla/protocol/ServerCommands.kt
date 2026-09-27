@@ -27,7 +27,7 @@ import se.lublin.humla.util.MumbleVersion
  * drop them silently once the connection is gone. Any thread.
  */
 @Suppress("TooManyFunctions") // One function per request the protocol offers.
-class ServerCommands(private val send: (MessageLite, HumlaTCPMessageType) -> Unit) {
+internal class ServerCommands(private val send: (MessageLite, HumlaTCPMessageType) -> Unit) {
 
     /** The first two messages of every connection. Opus is the only codec this client offers. */
     fun handshake(release: String, osVersion: String, username: String?, password: String?, tokens: List<String>) {

@@ -29,28 +29,28 @@ import javax.net.ssl.X509TrustManager
 private const val BYTE_MASK = 0xFF
 
 /** Thrown when a host with a pinned certificate presents a different, not system-trusted one. */
-class CertificateChangedException(val host: String) :
+internal class CertificateChangedException(val host: String) :
     CertificateException("The certificate of $host differs from the one trusted before")
 
 /** Why the last server certificate check failed, if it did. */
-enum class TrustFailure { NONE, UNTRUSTED, CHANGED }
+internal enum class TrustFailure { NONE, UNTRUSTED, CHANGED }
 
 /**
  * Per-host certificate pins: the SHA-256 of a leaf certificate the user accepted for that host.
  * They are read from the app's trust store, where each accepted certificate is stored under the
  * host name as its alias.
  */
-object CertificatePins {
+public object CertificatePins {
     /** Lower-case hex SHA-256 of the DER encoding. */
-    fun fingerprint(certificate: X509Certificate): String =
+    public fun fingerprint(certificate: X509Certificate): String =
         MessageDigest.getInstance("SHA-256").digest(certificate.encoded)
             .joinToString("") { "%02x".format(it.toInt() and BYTE_MASK) }
 
     /** The trust store alias for [host]: lower case, without a trailing dot. */
-    fun aliasFor(host: String): String = HostnameMatcher.normalize(host)
+    public fun aliasFor(host: String): String = HostnameMatcher.normalize(host)
 
     /** Pins stored for [host] in [trustStore]; aliases are compared case-insensitively. */
-    fun forHost(trustStore: KeyStore?, host: String): Set<String> {
+    public fun forHost(trustStore: KeyStore?, host: String): Set<String> {
         if (trustStore == null) return emptySet()
         val wanted = aliasFor(host)
         return trustStore.aliases().toList()
@@ -62,7 +62,7 @@ object CertificatePins {
 }
 
 /** RFC 6125 style matching of a host name or IP literal against a certificate's subjectAltNames. */
-object HostnameMatcher {
+internal object HostnameMatcher {
     private const val SAN_DNS = 2
     private const val SAN_IP = 7
     private val IPV4 = Regex("""^\d{1,3}(\.\d{1,3}){3}$""")
@@ -119,7 +119,7 @@ object HostnameMatcher {
  * A chain that is neither fails; it fails with [CertificateChangedException] when [host] has pins,
  * so a changed certificate can be told apart from a first contact.
  */
-class ServerTrustManager(
+internal class ServerTrustManager(
     private val system: X509TrustManager,
     private val host: String,
     private val pins: Set<String>,

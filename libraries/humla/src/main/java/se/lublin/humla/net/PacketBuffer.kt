@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 
 /** Reads and writes Mumble's packet data stream (its varint encoding) over a [ByteBuffer]. */
 @Suppress("TooManyFunctions")
-class PacketBuffer(private val buffer: ByteBuffer) {
+internal class PacketBuffer(private val buffer: ByteBuffer) {
 
     /** Wraps the first [len] bytes of [data]. */
     constructor(data: ByteArray, len: Int) : this(ByteBuffer.wrap(data).apply { limit(len) })

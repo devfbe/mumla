@@ -21,7 +21,7 @@ package se.lublin.humla.audio.native
  * libspeexdsp preprocessor. State handles are opaque: the bridge wraps the state together with its
  * frame size (libspeexdsp cannot report it) so [run] can check the array length.
  */
-interface SpeexPreprocessApi {
+internal interface SpeexPreprocessApi {
     /** A new state, or 0 if [frameSize] is not positive or speex could not allocate one. */
     fun init(frameSize: Int, sampleRate: Int): Long
 
@@ -51,7 +51,7 @@ interface SpeexPreprocessApi {
     fun destroy(state: Long)
 }
 
-object SpeexPreprocessNative : SpeexPreprocessApi {
+internal object SpeexPreprocessNative : SpeexPreprocessApi {
     const val SPEEX_PREPROCESS_SET_DENOISE = 0
     const val SPEEX_PREPROCESS_SET_AGC = 2
     const val SPEEX_PREPROCESS_SET_VAD = 4

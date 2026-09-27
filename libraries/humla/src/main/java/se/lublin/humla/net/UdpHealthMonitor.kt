@@ -26,7 +26,7 @@ package se.lublin.humla.net
  *
  * Times are microseconds on the connection's monotonic clock. Not thread-safe: protocol context only.
  */
-class UdpHealthMonitor(
+internal class UdpHealthMonitor(
     private val windowMicros: Long = 20_000_000L,
     private val pingTimeoutMicros: Long = 15_000_000L,
     private val restoreThreshold: Int = 1,

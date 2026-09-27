@@ -23,7 +23,7 @@ import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.audio.capture.VoiceActivityDetector
 
 /** Voice-activity input mode: delegates to a [VoiceActivityDetector]. */
-class ActivityInputMode(private val detector: VoiceActivityDetector) : IInputMode {
+internal class ActivityInputMode(private val detector: VoiceActivityDetector) : IInputMode {
     /** Amplitude mode with a single start threshold. */
     constructor(detectionThreshold: Float) : this(VoiceActivityDetector(VadConfig.amplitude(detectionThreshold)))
 

@@ -41,17 +41,17 @@ public fun interface PcmPlaybackSinkFactory {
 
 /** The real sink: one `AudioTrack` in streaming mode. */
 public class AndroidAudioTrackSink internal constructor(private val track: AudioTrack) : PcmPlaybackSink {
-    override fun play() = track.play()
+    override fun play(): Unit = track.play()
 
     override fun write(buffer: ShortArray, length: Int): Int = track.write(buffer, 0, length)
 
-    override fun pause() = track.pause()
+    override fun pause(): Unit = track.pause()
 
-    override fun flush() = track.flush()
+    override fun flush(): Unit = track.flush()
 
-    override fun stop() = track.stop()
+    override fun stop(): Unit = track.stop()
 
-    override fun release() = track.release()
+    override fun release(): Unit = track.release()
 
     public class Factory : PcmPlaybackSinkFactory {
         override fun open(audioStream: Int, sampleRate: Int): PcmPlaybackSink {

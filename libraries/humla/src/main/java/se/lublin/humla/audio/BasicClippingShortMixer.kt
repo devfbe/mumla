@@ -1,7 +1,7 @@
 package se.lublin.humla.audio
 
 /** Sums float PCM sources and converts to 16-bit PCM, clipping naively to [-1, 1]. */
-class BasicClippingShortMixer : IAudioMixer<FloatArray, ShortArray> {
+internal class BasicClippingShortMixer : IAudioMixer<FloatArray, ShortArray> {
     override fun mix(
         sources: List<IAudioMixerSource<FloatArray>>,
         buffer: ShortArray,

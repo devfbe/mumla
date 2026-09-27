@@ -18,7 +18,7 @@
 package se.lublin.humla.audio.native
 
 /** libspeexdsp resampler. `inLen[0]`/`outLen[0]` are in/out sample counts as in `speex_resampler_process_int`. */
-interface SpeexResamplerApi {
+internal interface SpeexResamplerApi {
     /** A new state, or 0 if [channels] is not positive or speex could not allocate one. `error[0]`
      *  receives a `RESAMPLER_ERR_*` code when [error] is given and has room for it. */
     fun init(channels: Int, inRate: Int, outRate: Int, quality: Int, error: IntArray?): Long
@@ -45,7 +45,7 @@ interface SpeexResamplerApi {
     fun destroy(state: Long)
 }
 
-object SpeexResamplerNative : SpeexResamplerApi {
+internal object SpeexResamplerNative : SpeexResamplerApi {
     init {
         HumlaNativeLibrary.load()
     }

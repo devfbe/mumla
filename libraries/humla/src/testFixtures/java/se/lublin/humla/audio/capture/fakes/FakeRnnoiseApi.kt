@@ -28,7 +28,7 @@ import se.lublin.humla.audio.native.RnnoiseNative
  * `HANDLE` differs from 0 and from [FakeWebRtcApmApi.HANDLE], so [check] catches a handle passed to
  * the wrong bridge.
  */
-class FakeRnnoiseApi(
+internal class FakeRnnoiseApi(
     /** What `rnnoise_process_frame` answers for an accepted frame. Unclamped on purpose. */
     var probability: Float = 0f,
     private val onProcess: (ShortArray) -> Unit = {},

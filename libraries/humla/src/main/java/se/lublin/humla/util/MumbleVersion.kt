@@ -22,7 +22,7 @@ import se.lublin.humla.protobuf.Mumble
  * Mumble version numbers. The legacy format (v1) is `0xMMMMmmpp`; the current one (v2) is a
  * 64-bit value with 16 bits each for major, minor and patch at bits 48, 32 and 16.
  */
-object MumbleVersion {
+internal object MumbleVersion {
     private const val OFFSET_MAJOR = 48
     private const val OFFSET_MINOR = 32
     private const val OFFSET_PATCH = 16

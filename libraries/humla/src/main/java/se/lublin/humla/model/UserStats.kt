@@ -29,7 +29,7 @@ import java.security.cert.X509Certificate
  * A user's connection statistics from the server's `UserStats`. A value the server did not send,
  * typically because the local user may not see it, is null.
  */
-data class UserStats(
+public data class UserStats(
     val session: Int,
     /** The client's version, "major.minor.patch". */
     val version: String?,
@@ -55,12 +55,12 @@ data class UserStats(
     val opus: Boolean,
 ) {
     /** Ping round trips in milliseconds. */
-    data class Ping(val packets: Int, val averageMillis: Float, val varianceMillis: Float)
+    public data class Ping(val packets: Int, val averageMillis: Float, val varianceMillis: Float)
 
-    data class Packets(val good: Int, val late: Int, val lost: Int, val resync: Int)
+    public data class Packets(val good: Int, val late: Int, val lost: Int, val resync: Int)
 
-    companion object {
-        fun from(msg: Mumble.UserStats): UserStats {
+    public companion object {
+        internal fun from(msg: Mumble.UserStats): UserStats {
             val version = msg.version.takeIf { msg.hasVersion() }
             return UserStats(
                 session = msg.session,

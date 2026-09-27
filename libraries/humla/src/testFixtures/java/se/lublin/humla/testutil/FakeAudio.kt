@@ -29,10 +29,10 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 
-const val FAKE_BANDWIDTH = 12_345
+internal const val FAKE_BANDWIDTH = 12_345
 
 /** A pipeline that opens no device; shared by the service tests. */
-class FakeAudio : ManagedAudio {
+internal class FakeAudio : ManagedAudio {
     val shutdownCalls = AtomicInteger()
     @Volatile var shutdownThread: String? = null
 
@@ -53,7 +53,7 @@ class FakeAudio : ManagedAudio {
     }
 }
 
-class FakeAudioFactory : AudioHandlerFactory {
+internal class FakeAudioFactory : AudioHandlerFactory {
     val created = CopyOnWriteArrayList<FakeAudio>()
     val configs = CopyOnWriteArrayList<AudioConfig>()
     val sessionParams = CopyOnWriteArrayList<AudioSessionParams>()

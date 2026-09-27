@@ -45,7 +45,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * [loseLatest]. A connection runs inline on the calling thread; its callbacks reach the session
  * through the main looper, as a real connection's do. The audio pipeline is a fake.
  */
-class ScriptedConnections(reconnectBaseDelayMillis: Long, reconnectAttempts: Int) {
+public class ScriptedConnections(reconnectBaseDelayMillis: Long, reconnectAttempts: Int) {
     private val policy = ReconnectPolicy(
         baseDelayMillis = reconnectBaseDelayMillis,
         maxAttempts = reconnectAttempts,
@@ -54,12 +54,12 @@ class ScriptedConnections(reconnectBaseDelayMillis: Long, reconnectAttempts: Int
     private val transports = CopyOnWriteArrayList<ScriptedTcp>()
 
     /** Connection attempts so far. */
-    val attempts: Int get() = transports.size
+    public val attempts: Int get() = transports.size
 
     /** How often the transport of attempt [index] (0-based) was closed. */
-    fun disconnectCalls(index: Int): Int = transports[index].disconnectCalls
+    public fun disconnectCalls(index: Int): Int = transports[index].disconnectCalls
 
-    fun session(context: Context, config: SessionConfig): IHumlaSession {
+    public fun session(context: Context, config: SessionConfig): IHumlaSession {
         val main = Handler(Looper.getMainLooper())
         return HumlaSession(
             context,
@@ -75,7 +75,7 @@ class ScriptedConnections(reconnectBaseDelayMillis: Long, reconnectAttempts: Int
     }
 
     /** The server of the latest attempt accepts it: TLS, the own user, ServerSync. */
-    fun synchronizeLatest(session: Int = 1) {
+    public fun synchronizeLatest(session: Int = 1) {
         val tcp = transports.last()
         tcp.listener.onTCPConnectionEstablished()
         tcp.receive(HumlaTCPMessageType.ChannelState, Mumble.ChannelState.newBuilder().setChannelId(0).setName("Root"))
@@ -87,7 +87,7 @@ class ScriptedConnections(reconnectBaseDelayMillis: Long, reconnectAttempts: Int
     }
 
     /** The latest attempt's socket fails with [message], as a dropped network does. */
-    fun loseLatest(message: String) {
+    public fun loseLatest(message: String) {
         transports.last().listener.onTCPConnectionFailed(
             HumlaException(message, HumlaException.HumlaDisconnectReason.CONNECTION_ERROR),
         )

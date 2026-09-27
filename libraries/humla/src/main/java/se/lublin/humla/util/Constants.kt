@@ -17,11 +17,11 @@
 package se.lublin.humla.util
 
 /** Protocol constants. Prefer keeping new constants with the class that uses them. */
-object Constants {
-    const val PROTOCOL_MAJOR = 1
-    const val PROTOCOL_MINOR = 5
-    const val PROTOCOL_PATCH = 0
+public object Constants {
+    internal const val PROTOCOL_MAJOR: Int = 1
+    internal const val PROTOCOL_MINOR: Int = 5
+    internal const val PROTOCOL_PATCH: Int = 0
 
-    const val PROTOCOL_STRING = "$PROTOCOL_MAJOR.$PROTOCOL_MINOR.$PROTOCOL_PATCH"
-    const val DEFAULT_PORT = 64738
+    public const val PROTOCOL_STRING: String = "$PROTOCOL_MAJOR.$PROTOCOL_MINOR.$PROTOCOL_PATCH"
+    internal const val DEFAULT_PORT: Int = 64738
 }

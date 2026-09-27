@@ -21,7 +21,7 @@ package se.lublin.humla.audio.capture
  * Preference values are stable on-disk identifiers. Unknown values fall back to [AMPLITUDE], what
  * older installs ran, so their `detection_threshold` slider keeps working.
  */
-enum class VadMode(val preferenceValue: String) {
+public enum class VadMode(public val preferenceValue: String) {
     /** Legacy dBFS level detector; kept for devices where the models fail. */
     AMPLITUDE("amplitude"),
 
@@ -31,8 +31,8 @@ enum class VadMode(val preferenceValue: String) {
     /** Level detector with a threshold between tracked noise floor and speech peak ([AdaptiveVadTracker]). */
     ADAPTIVE("adaptive");
 
-    companion object {
-        fun fromPreferenceValue(value: String?): VadMode =
+    public companion object {
+        public fun fromPreferenceValue(value: String?): VadMode =
             entries.firstOrNull { it.preferenceValue == value } ?: AMPLITUDE
     }
 }
@@ -41,7 +41,7 @@ enum class VadMode(val preferenceValue: String) {
  * Start/stop hysteresis plus hold time. Thresholds are scores in [0, 1]: the amplitude score for
  * [VadMode.AMPLITUDE], the chain's probability for [VadMode.PROBABILITY]; the scales aren't comparable.
  */
-data class VadConfig(
+public data class VadConfig(
     val mode: VadMode,
     val startThreshold: Float,
     val stopThreshold: Float,
@@ -72,18 +72,28 @@ data class VadConfig(
         }
     }
 
-    companion object {
-        const val AMPLITUDE_HYSTERESIS = 0.15f
-        const val DEFAULT_HOLD_MS = 250L
-        const val DEFAULT_HYSTERESIS_DB = 6f
+    public companion object {
+        internal const val AMPLITUDE_HYSTERESIS: Float = 0.15f
+        internal const val DEFAULT_HOLD_MS: Long = 250L
+        public const val DEFAULT_HYSTERESIS_DB: Float = 6f
 
-        const val DEFAULT_ONSET_FRAMES = 1
+        public const val DEFAULT_ONSET_FRAMES: Int = 1
 
         /** Largest hold whose `holdTimeMs * 1_000_000` nanosecond deadline doesn't overflow. */
-        const val MAX_HOLD_MS = Long.MAX_VALUE / 1_000_000L
+        internal const val MAX_HOLD_MS: Long = Long.MAX_VALUE / 1_000_000L
+
+        public const val DEFAULT_SNR_FRACTION: Float = AdaptiveVadTracker.DEFAULT_FRACTION
+
+        /** The bounds of [manualFloorDbfs], which is also where an adaptive floor stays. */
+        public const val MIN_FLOOR_DBFS: Float = AdaptiveVadTracker.MIN_FLOOR_DBFS
+        public const val MAX_FLOOR_DBFS: Float = AdaptiveVadTracker.MAX_FLOOR_DBFS
+        public const val DEFAULT_FLOOR_DBFS: Float = AdaptiveVadTracker.DEFAULT_FLOOR_DBFS
+
+        /** The level a silent frame is measured at. */
+        public const val NO_SIGNAL_DBFS: Float = VoiceActivityDetector.NO_SIGNAL_DBFS
 
         /** Legacy single slider: stop = start - 0.15. */
-        fun amplitude(
+        public fun amplitude(
             threshold: Float,
             holdTimeMs: Long = DEFAULT_HOLD_MS,
             onsetFrames: Int = DEFAULT_ONSET_FRAMES,
@@ -95,14 +105,14 @@ data class VadConfig(
             )
         }
 
-        fun probability(
+        public fun probability(
             start: Float = 0.6f,
             stop: Float = 0.3f,
             holdTimeMs: Long = DEFAULT_HOLD_MS,
             onsetFrames: Int = DEFAULT_ONSET_FRAMES,
         ): VadConfig = VadConfig(VadMode.PROBABILITY, start, stop, holdTimeMs, onsetFrames = onsetFrames)
 
-        fun adaptive(
+        public fun adaptive(
             snrFraction: Float = AdaptiveVadTracker.DEFAULT_FRACTION,
             holdTimeMs: Long = DEFAULT_HOLD_MS,
             onsetFrames: Int = DEFAULT_ONSET_FRAMES,
@@ -118,6 +128,6 @@ data class VadConfig(
             manualFloorDbfs = manualFloorDbfs,
         )
 
-        val DEFAULT: VadConfig = probability()
+        public val DEFAULT: VadConfig = probability()
     }
 }

@@ -18,7 +18,7 @@
 package se.lublin.humla.net
 
 /** The SOCKS proxy of a local Orbot, through which connections go when Tor is on. */
-object TorProxy {
-    const val HOST = "localhost"
-    const val PORT = 9050
+public object TorProxy {
+    public const val HOST: String = "localhost"
+    public const val PORT: Int = 9050
 }

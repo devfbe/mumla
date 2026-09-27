@@ -45,7 +45,7 @@ import java.util.Date
 
 private const val RSA_KEY_BITS = 2048
 
-object HumlaCertificateGenerator {
+public object HumlaCertificateGenerator {
     private const val ISSUER = "CN=Humla Client"
     private const val ALIAS = "Humla Key"
     private const val YEARS_VALID = 20
@@ -57,7 +57,7 @@ object HumlaCertificateGenerator {
      */
     private const val MAC_ITERATIONS = 2048
 
-    fun generateCertificate(output: OutputStream): X509Certificate {
+    public fun generateCertificate(output: OutputStream): X509Certificate {
         // BouncyCastle provider instance: supports creating X509 certs and PKCS#12 stores.
         val provider = BouncyCastleProvider()
         val generator = KeyPairGenerator.getInstance("RSA")

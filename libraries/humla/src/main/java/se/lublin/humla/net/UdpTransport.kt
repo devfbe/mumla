@@ -23,7 +23,7 @@ package se.lublin.humla.net
  * Single-use: [HumlaConnection] builds a fresh transport for every UDP start and for every restart
  * after a failure, so an implementation may refuse a second [connect].
  */
-interface UdpTransport {
+internal interface UdpTransport {
     /** True once the socket is open and [sendMessage] can be used. */
     val isRunning: Boolean
     fun connect(host: String, port: Int)

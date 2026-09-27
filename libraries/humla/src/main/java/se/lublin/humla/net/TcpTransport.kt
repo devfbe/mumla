@@ -25,7 +25,7 @@ import com.google.protobuf.MessageLite
  * Implementations dispatch every [HumlaTCP.TCPConnectionListener] call on the scope they were given,
  * so the connection never sees a callback on a socket thread. Single-use.
  */
-interface TcpTransport {
+internal interface TcpTransport {
     val isRunning: Boolean
     fun setTCPConnectionListener(listener: HumlaTCP.TCPConnectionListener?)
 

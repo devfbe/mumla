@@ -23,11 +23,10 @@ import android.media.AudioDeviceInfo
 import android.view.Gravity
 import androidx.core.content.edit
 import androidx.preference.PreferenceManager
+import se.lublin.humla.audio.PipelineSettings
 import se.lublin.humla.audio.TransmitMode
-import se.lublin.humla.audio.capture.AdaptiveVadTracker
 import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
-import se.lublin.humla.audio.capture.SpeexPreprocessor
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.audio.routing.AudioDeviceCategory
@@ -207,10 +206,10 @@ class Settings private constructor(private val context: Context) {
     val noiseSuppressionMode: NoiseSuppressionMode
         get() = NoiseSuppressionMode.fromPreferenceValue(noiseSuppressionMethod)
 
-    /** Anything outside [SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB] is the default. */
+    /** Anything outside [PipelineSettings.SPEEX_NOISE_SUPPRESS_DB] is the default. */
     val speexNoiseSuppressDb: Int
         get() = preferences.getString(SPEEX_NOISE_SUPPRESS_DB.key, null)?.toIntOrNull()
-            ?.takeIf { it in SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB } ?: SPEEX_NOISE_SUPPRESS_DB.default
+            ?.takeIf { it in PipelineSettings.SPEEX_NOISE_SUPPRESS_DB } ?: SPEEX_NOISE_SUPPRESS_DB.default
 
     val vadMode: VadMode get() = VadMode.fromPreferenceValue(preferences.read(VAD_MODE))
 
@@ -239,7 +238,7 @@ class Settings private constructor(private val context: Context) {
                     onsetFrames = onsetFrames,
                     adaptiveFloor = preferences.read(VAD_ADAPTIVE_FLOOR),
                     manualFloorDbfs = (-preferences.read(VAD_FLOOR_DB).toFloat())
-                        .coerceIn(AdaptiveVadTracker.MIN_FLOOR_DBFS, AdaptiveVadTracker.MAX_FLOOR_DBFS),
+                        .coerceIn(VadConfig.MIN_FLOOR_DBFS, VadConfig.MAX_FLOOR_DBFS),
                 )
             }
         }
