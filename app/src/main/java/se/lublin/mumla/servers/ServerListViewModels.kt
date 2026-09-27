@@ -168,7 +168,8 @@ class PublicServersViewModel(
     /** The ping replies the list is arranged by. */
     private val arrangedBy = MutableStateFlow<Map<ServerAddress, ServerInfoResponse>>(emptyMap())
 
-    private var settling: Job? = null
+    /** Downloads the list, then arranges it once more when the first replies settle. */
+    private var loading: Job? = null
 
     val state: StateFlow<State> = combine(download, mutableFilter, arrangedBy) { download, filter, replies ->
         when (download) {
@@ -184,26 +185,22 @@ class PublicServersViewModel(
     /** Downloads the list again, e.g. after it failed. */
     fun retry() = load()
 
+    @OptIn(FlowPreview::class)
     private fun load() {
+        loading?.cancel()
         if (torEnabled()) {
             download.value = State.TorBlocked
         } else {
             download.value = State.Loading
-            viewModelScope.launch {
+            loading = viewModelScope.launch {
                 val servers = fetcher.fetch()
                 arrangedBy.value = pings.replies.value
                 download.value = servers?.let { State.Shown(it, countriesOf(it)) } ?: State.DownloadFailed
-                if (servers != null) arrangeWhenRepliesSettle()
+                if (servers != null) {
+                    pings.replies.filter { it.isNotEmpty() }.debounce(REPLIES_SETTLE_TIME).first()
+                    arrangedBy.value = pings.replies.value
+                }
             }
-        }
-    }
-
-    @OptIn(FlowPreview::class)
-    private fun arrangeWhenRepliesSettle() {
-        settling?.cancel()
-        settling = viewModelScope.launch {
-            pings.replies.filter { it.isNotEmpty() }.debounce(REPLIES_SETTLE_TIME).first()
-            arrangedBy.value = pings.replies.value
         }
     }
 
