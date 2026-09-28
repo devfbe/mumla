@@ -136,8 +136,31 @@ internal object DoubleTalkRig {
     /** The app's WEBRTC chain with [aec3] in place of the shipped tuning, optionally with RNNoise. */
     fun appChain(aec3: Aec3Tuning?, rnnoise: Boolean = true): CaptureChain {
         val apm = WebRtcApmPreprocessor(WebRtcApmNative, WebRtcApmConfig.FOR_ECHO_CANCELLATION.copy(aec3 = aec3))
-        val stages = if (rnnoise) listOf(apm, RnnoisePreprocessor(RnnoiseNative)) else listOf(apm)
+        val denoiser = RnnoisePreprocessor(RnnoiseNative, Float.POSITIVE_INFINITY)
+        val stages = if (rnnoise) listOf(apm, denoiser) else listOf(apm)
         return CaptureChain(if (rnnoise) ChainedPreprocessor(stages) else apm, apm, apm.farEndFrameSize)
+    }
+
+    /**
+     * AEC3 (+ high-pass), RNNoise limited to [limitDb], and AGC2 either in the canceller's APM in
+     * front of RNNoise (the chain before the limit) or in a second APM behind it. Without [aec] it is
+     * RNNoise alone (echo cancellation off).
+     */
+    fun limitedChain(limitDb: Float, agcAfter: Boolean, aec: Boolean = true): CaptureChain {
+        val denoiser = RnnoisePreprocessor(RnnoiseNative, limitDb)
+        if (!aec) return CaptureChain(denoiser, null)
+        val apm = WebRtcApmPreprocessor(
+            WebRtcApmNative, WebRtcApmConfig.FOR_ECHO_CANCELLATION.copy(gainControl = !agcAfter),
+        )
+        val stages = if (agcAfter) {
+            val agc = WebRtcApmConfig(
+                echoCancellation = false, noiseSuppression = false, gainControl = true, highPass = false,
+            )
+            listOf(apm, denoiser, WebRtcApmPreprocessor(WebRtcApmNative, agc))
+        } else {
+            listOf(apm, denoiser)
+        }
+        return CaptureChain(ChainedPreprocessor(stages), apm, apm.farEndFrameSize)
     }
 
     /** Runs a freshly built [chain] over the whole timeline, like `AudioOutput` + `CapturePipeline`. */
@@ -183,6 +206,50 @@ internal object DoubleTalkRig {
     fun runNearAlone(chain: CaptureChain, nearDbfs: Float, talkers: Int = 0): Run =
         run(chain, silence, sum(near(nearDbfs, talkers), noiseFloor))
 
+    /** Share of voiced near-end frames (double talk and near-only phases) on which [nearAlone]'s gate is open. */
+    fun nearAloneGate(nearAlone: Run, nearDbfs: Float, talkers: Int = 0): Float {
+        val near = near(nearDbfs, talkers)
+        val voiced = (dtStart until frames).filter { dbfs(meanPower(near, it, it + 1)) > nearDbfs - 10f }
+        return voiced.count { nearAlone.transmit[it] }.toFloat() / voiced.size
+    }
+
+    /** Background noise with no speech: fan-like pink noise, or babble (six talkers at once). */
+    enum class Noise { PINK, BABBLE }
+
+    private val noises = HashMap<Pair<Noise, Float>, FloatArray>()
+
+    fun noise(kind: Noise, dbfs: Float): FloatArray = noises.getOrPut(kind to dbfs) {
+        when (kind) {
+            Noise.PINK -> pinkNoise(samples, dbfs, seed = 5)
+            Noise.BABBLE -> babble(samples, dbfs)
+        }
+    }
+
+    /** What a chain does with noise alone; statistics skip the first two seconds (VAD floor settling). */
+    class NoiseMeasurement(
+        /** Share of frames on which the gate opens. */
+        val falseOpen: Float,
+        /** Mean output level, dBFS. */
+        val residualDbfs: Float,
+        /** 95th percentile of frame output levels, dBFS. */
+        val residualP95Dbfs: Float,
+        /** Mean input level, dBFS. */
+        val inputDbfs: Float,
+    )
+
+    fun measureNoise(chain: CaptureChain, noise: FloatArray): NoiseMeasurement {
+        val mic = sum(noise, noiseFloor)
+        val r = run(chain, silence, mic)
+        val settled = CONVERGED_FRAME until frames
+        val levels = settled.map { dbfs(r.power[it]) }.sorted()
+        return NoiseMeasurement(
+            falseOpen = settled.count { r.transmit[it] }.toFloat() / (frames - CONVERGED_FRAME),
+            residualDbfs = dbfs(mean(r.power, CONVERGED_FRAME, frames)),
+            residualP95Dbfs = levels[(levels.size * 0.95).toInt()],
+            inputDbfs = dbfs(meanPower(mic, CONVERGED_FRAME, frames)),
+        )
+    }
+
     /** What one tuning does to one scenario, full app chain. */
     @Suppress("LongParameterList") // a plain record of the eight numbers the harness reports
     class Measurement(
@@ -204,12 +271,27 @@ internal object DoubleTalkRig {
         val echoInDbfs: Float,
     )
 
-    fun measure(scenario: Scenario, build: () -> CaptureChain, nearAlone: Run): Measurement {
-        val near = near(scenario.nearDbfs, scenario.talkers)
+    /** The microphone signals of runs A (echo + near + noise) and B (echo + noise) for one scenario. */
+    class Mics(val a: FloatArray, val b: FloatArray, val echoInDbfs: Float)
+
+    fun mics(scenario: Scenario): Mics {
         val echo = echo(scenario)
+        return Mics(
+            a = sum(echo, near(scenario.nearDbfs, scenario.talkers), noiseFloor),
+            b = sum(echo, noiseFloor),
+            echoInDbfs = dbfs(meanPower(echo, 0, dtStart)),
+        )
+    }
+
+    fun measure(
+        scenario: Scenario,
+        build: () -> CaptureChain,
+        nearAlone: Run,
+        mics: Mics = mics(scenario),
+    ): Measurement {
         val far = far(scenario.talkers)
-        val a = run(build(), far, sum(echo, near, noiseFloor))
-        val b = run(build(), far, sum(echo, noiseFloor))
+        val a = run(build(), far, mics.a)
+        val b = run(build(), far, mics.b)
         val c = nearAlone
         val kept = db(max(mean(a.power, dtStart, dtEnd) - mean(b.power, dtStart, dtEnd), TINY) /
             max(mean(c.power, dtStart, dtEnd), TINY))
@@ -224,7 +306,7 @@ internal object DoubleTalkRig {
             residualP95Dbfs = levels[(levels.size * 0.95).toInt()],
             falseOpen = echoOnly.count { b.transmit[it] }.toFloat() / (echoOnly.last + 1 - echoOnly.first),
             falseOpenConverging = (0 until CONVERGED_FRAME).count { b.transmit[it] }.toFloat() / CONVERGED_FRAME,
-            echoInDbfs = dbfs(meanPower(echo, 0, dtStart)),
+            echoInDbfs = mics.echoInDbfs,
         )
     }
 
@@ -329,6 +411,48 @@ internal object DoubleTalkRig {
         val amplitude = 10.0.pow(dbfs / 20.0).toFloat() * sqrt(3f) // uniform: rms = a/sqrt(3)
         return FloatArray(samples) { (random.nextFloat() * 2f - 1f) * amplitude }
     }
+
+    /** Pink (-3 dB per octave) noise, Paul Kellet's filter over white noise, scaled to [dbfs]. */
+    private fun pinkNoise(samples: Int, dbfs: Float, seed: Int): FloatArray {
+        val random = Random(seed)
+        val b = DoubleArray(7)
+        val out = FloatArray(samples)
+        for (i in out.indices) {
+            val white = random.nextDouble() * 2 - 1
+            b[0] = 0.99886 * b[0] + white * 0.0555179
+            b[1] = 0.99332 * b[1] + white * 0.0750759
+            b[2] = 0.96900 * b[2] + white * 0.1538520
+            b[3] = 0.86650 * b[3] + white * 0.3104856
+            b[4] = 0.55000 * b[4] + white * 0.5329522
+            b[5] = -0.7616 * b[5] - white * 0.0168980
+            out[i] = (b[0] + b[1] + b[2] + b[3] + b[4] + b[5] + b[6] + white * 0.5362).toFloat()
+            b[6] = white * 0.115926
+        }
+        return scaled(out, dbfs)
+    }
+
+    /** Six speech-like talkers at once, each with its own pitch, rate and pauses, scaled to [dbfs]. */
+    private fun babble(samples: Int, dbfs: Float): FloatArray {
+        val out = FloatArray(samples)
+        for (k in 0 until BABBLE_TALKERS) {
+            val talker =
+                speechLike(samples, f0 = 100.0 + 25.0 * k, syllableHz = 3.0 + 0.35 * k, seed = 100 + k, dbfs = 0f)
+            // Stagger the pauses, which speechLike puts at the same place in every 2 s.
+            val shift = k * RATE / 3
+            for (i in out.indices) out[i] += talker[(i + shift) % samples]
+        }
+        return scaled(out, dbfs)
+    }
+
+    private fun scaled(signal: FloatArray, dbfs: Float): FloatArray {
+        var sumSquares = 0.0
+        for (v in signal) sumSquares += v.toDouble() * v
+        val gain = (10.0.pow(dbfs / 20.0) / sqrt(sumSquares / signal.size)).toFloat()
+        for (i in signal.indices) signal[i] *= gain
+        return signal
+    }
+
+    private const val BABBLE_TALKERS = 6
 
     /** Vowel formants (F1, F2, F3) in Hz. */
     private val VOWELS = arrayOf(

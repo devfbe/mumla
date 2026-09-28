@@ -86,6 +86,19 @@ class CapturePreprocessorFactoryTest {
         assertThat(chain.farEndSink).isNotNull()
     }
 
+    /**
+     * AGC2 stays in the canceller's APM, in front of RNNoise. Measured both ways
+     * (`RnnoiseAttenuationLimitDeviceTest`): behind RNNoise, AGC2 lifted what RNNoise leaves of
+     * babble by about 20 dB and let fan noise open the gate.
+     */
+    @Test
+    fun `with rnnoise the gain control runs in the canceller's apm, in front of rnnoise`() {
+        factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC)
+
+        assertThat(apm.createdWith?.second?.echoCancellation).isTrue()
+        assertThat(apm.createdWith?.second?.gainControl).isTrue()
+    }
+
     @Test
     fun `webrtc echo runs before speex and the probability comes from speex`() {
         val chain = factory.create(NoiseSuppressionMode.SPEEX, EchoCancellationMode.WEBRTC)

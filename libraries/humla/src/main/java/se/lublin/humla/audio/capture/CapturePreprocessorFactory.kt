@@ -44,8 +44,11 @@ internal class CaptureChain(
 
 /**
  * Builds the capture chain: the WebRTC APM first when echo cancellation is WEBRTC, then Speex or
- * RNNoise. The APIs are factories because touching the native objects loads the library; a missing
- * `.so` becomes a skipped stage and a [log] line.
+ * RNNoise. AGC2 stays in the canceller's APM, in front of RNNoise: behind it, AGC2 lifted what
+ * RNNoise leaves of babble by about 25 dB and of fan noise by 15-18 dB
+ * (`RnnoiseAttenuationLimitDeviceTest`).
+ * The APIs are factories because touching the native objects loads the library; a missing `.so`
+ * becomes a skipped stage and a [log] line.
  */
 internal class CapturePreprocessorFactory(
     private val speexApi: () -> SpeexPreprocessApi = { SpeexPreprocessNative },

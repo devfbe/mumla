@@ -272,7 +272,7 @@ class DoubleTalkAec3DeviceTest {
             Chain.APM_NO_AGC_RNNOISE -> {
                 val config = WebRtcApmConfig.FOR_ECHO_CANCELLATION.copy(gainControl = false)
                 val apm = WebRtcApmPreprocessor(WebRtcApmNative, config)
-                val stages = listOf(apm, RnnoisePreprocessor(RnnoiseNative))
+                val stages = listOf(apm, RnnoisePreprocessor(RnnoiseNative, Float.POSITIVE_INFINITY))
                 CaptureChain(ChainedPreprocessor(stages), apm, apm.farEndFrameSize)
             }
         }
@@ -352,7 +352,7 @@ class DoubleTalkAec3DeviceTest {
                         echoCancellation = false, noiseSuppression = false, gainControl = true, highPass = false,
                     ),
                 )
-                val stages = listOf(aec, RnnoisePreprocessor(RnnoiseNative), agc)
+                val stages = listOf(aec, RnnoisePreprocessor(RnnoiseNative, Float.POSITIVE_INFINITY), agc)
                 CaptureChain(ChainedPreprocessor(stages), aec, aec.farEndFrameSize)
             },
         )
