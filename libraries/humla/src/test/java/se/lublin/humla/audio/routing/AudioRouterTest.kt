@@ -97,8 +97,9 @@ class AudioRouterTest {
      * In communication mode the platform's own default is the earpiece, so every default is routed
      * explicitly: a saved headset that is there, even over another headset (a Bluetooth one found by
      * its address, as its id changes on every connection); else a Bluetooth headset unless the user
-     * switched that off, LE Audio included; else a plugged-in headset; else a saved built-in device
-     * (a tablet has no earpiece, so saving one must not leave it silent); else the speaker.
+     * switched that off, LE Audio included; else a plugged-in headset; else the speaker. A saved
+     * built-in device that is there is taken over any headset present when the session starts (a
+     * tablet has no earpiece, so saving one must not leave it silent).
      */
     @Test
     fun theDefaultRouteFollowsThePreferenceOrder() {
@@ -111,12 +112,79 @@ class AudioRouterTest {
         assertThat(defaultRoute(mapOf(7 to TYPE_BLUETOOTH_SCO), bluetooth = false)).isEqualTo(2)
         assertThat(defaultRoute(mapOf(4 to TYPE_WIRED_HEADSET))).isEqualTo(4)
         assertThat(defaultRoute(preferred = earpiece)).isEqualTo(1)
-        assertThat(defaultRoute(mapOf(4 to TYPE_WIRED_HEADSET), preferred = earpiece)).isEqualTo(4)
+        assertThat(defaultRoute(mapOf(4 to TYPE_WIRED_HEADSET), preferred = earpiece)).isEqualTo(1)
         assertThat(defaultRoute(preferred = earpiece, earpiece = false)).isEqualTo(2)
         assertThat(defaultRoute(wiredAndBluetooth, mapOf(7 to "AA"), savedHeadset, bluetooth = false)).isEqualTo(7)
         assertThat(defaultRoute(wiredAndBluetooth, mapOf(7 to "BB"), savedHeadset, bluetooth = false)).isEqualTo(4)
         val twoBluetooth = mapOf(7 to TYPE_BLUETOOTH_SCO, 9 to TYPE_BLUETOOTH_SCO)
         assertThat(defaultRoute(twoBluetooth, mapOf(7 to "BB", 9 to "AA"), savedHeadset)).isEqualTo(9)
+    }
+
+    /**
+     * A device picked before connecting is only saved; at the start of the session it must count as
+     * the same pick made while connected, so it wins over a headset that is already there, as the
+     * chooser showed it.
+     */
+    @Test
+    fun aSavedBuiltInDeviceWinsOverAHeadsetPresentWhenTheSessionStarts() {
+        val earpiece = PreferredAudioDevice(TYPE_BUILTIN_EARPIECE)
+        val speaker = PreferredAudioDevice(TYPE_BUILTIN_SPEAKER)
+
+        assertThat(defaultRoute(mapOf(7 to TYPE_BLUETOOTH_SCO), preferred = earpiece)).isEqualTo(1)
+        assertThat(defaultRoute(mapOf(8 to TYPE_BLE_HEADSET), preferred = earpiece)).isEqualTo(1)
+        assertThat(defaultRoute(mapOf(4 to TYPE_USB_HEADSET), preferred = earpiece)).isEqualTo(1)
+        assertThat(defaultRoute(mapOf(4 to TYPE_WIRED_HEADSET, 7 to TYPE_BLUETOOTH_SCO), preferred = speaker))
+            .isEqualTo(2)
+    }
+
+    /** ...while a headset switched on during the session still takes over, as from any pick. */
+    @Test
+    fun aHeadsetThatArrivesTakesOverFromASavedBuiltInDevice() {
+        phone()
+        devices.available[4] = TYPE_WIRED_HEADSET
+        router.preferred = PreferredAudioDevice(TYPE_BUILTIN_EARPIECE)
+        engaged()
+        assertThat(devices.selectedId).isEqualTo(1)
+
+        devices.deviceArrives(7, TYPE_BLUETOOTH_SCO)
+
+        assertThat(devices.selectedId).isEqualTo(7)
+        assertThat(routes).containsExactly(TYPE_BUILTIN_EARPIECE, TYPE_BLUETOOTH_SCO).inOrder()
+    }
+
+    /**
+     * The saved device beats the headset only as long as it is the saved device: changing the
+     * preference (in Settings, say) during the session moves the route by the new one.
+     */
+    @Test
+    fun changingThePreferenceDropsWhatTheOldOneWonAtTheStart() {
+        phone()
+        devices.available[7] = TYPE_BLUETOOTH_SCO
+        router.preferred = PreferredAudioDevice(TYPE_BUILTIN_EARPIECE)
+        engaged()
+        assertThat(devices.selectedId).isEqualTo(1)
+
+        router.preferred = null
+        router.apply()
+
+        assertThat(router.choice).isNull()
+        assertThat(devices.selectedId).isEqualTo(7)
+    }
+
+    /** A pick the user made in the session is theirs, and a new preference leaves it standing. */
+    @Test
+    fun changingThePreferenceLeavesAnExplicitChoiceStanding() {
+        phone()
+        devices.available[7] = TYPE_BLUETOOTH_SCO
+        router.preferred = PreferredAudioDevice(TYPE_BUILTIN_EARPIECE)
+        engaged()
+        router.choose(2)
+
+        router.preferred = null
+        router.apply()
+
+        assertThat(router.choice).isEqualTo(2)
+        assertThat(devices.selectedId).isEqualTo(2)
     }
 
     @Test

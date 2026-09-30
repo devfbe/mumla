@@ -232,6 +232,30 @@ class HumlaSessionBluetoothTest {
         assertThat(h.devices!!.selectedId).isEqualTo(2)
     }
 
+    /**
+     * A device picked before connecting is only saved, and at connect it must win over a headset
+     * that is already there, like the same pick made while connected; the pipeline is built for it.
+     * A later change of the saved device in Settings still moves the route.
+     */
+    @Test
+    fun aDeviceSavedBeforeConnectingIsRoutedOverAHeadsetAlreadyThere() {
+        val h = start()
+        h.phone()
+        h.devices!!.available[7] = AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+        val earpiece = PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
+        h.configureAudio { copy(preferredDevice = earpiece, bluetoothAutomatic = true) }
+        h.connectAndSynchronize()
+        h.drainUntil("audio created") { h.audioFactory.created.size == 1 }
+
+        assertThat(h.devices.selectCalls).containsExactly(1)
+        assertThat(h.session.audioSession.route.value).isEqualTo(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
+        assertThat(h.audioFactory.configs[0].routedDeviceType).isEqualTo(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
+
+        h.configureAudio { copy(preferredDevice = null) }
+
+        assertThat(h.devices.selectedId).isEqualTo(7)
+    }
+
     /** Saving a device while disconnected must not touch the platform: that would duck other apps. */
     @Test
     fun aSavedDeviceIsNotRoutedWithoutASession() {

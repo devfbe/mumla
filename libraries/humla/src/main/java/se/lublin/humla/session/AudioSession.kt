@@ -118,7 +118,7 @@ internal class AudioSession(
         activityInputMode.setVadConfig(next.vad)
         val routing = next.preferredDevice to next.bluetoothAutomatic
         if (routing != previous.preferredDevice to previous.bluetoothAutomatic) {
-            // A user's explicit choice is left standing.
+            // A user's explicit choice is left standing; one the old preference seeded is not.
             router.preferred = next.preferredDevice
             router.bluetoothAutomatic = next.bluetoothAutomatic
             router.apply()

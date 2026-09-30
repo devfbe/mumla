@@ -200,6 +200,19 @@ class AudioDeviceControlsTest {
         assertThat(selected()).containsExactly(null)
     }
 
+    /**
+     * A saved phone device is selected before connecting even with a headset on offer, because the
+     * session routes to it over a headset already there (`AudioRouter`); what is marked is what plays.
+     */
+    @Test
+    fun withoutAConnectionASavedEarpieceIsSelectedOverAHeadsetOnOffer() {
+        disconnected()
+        settings.preferredAudioDevice = PreferredAudioDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
+
+        assertThat(controls.choices().map { it.id }).contains(17)
+        assertThat(selected()).containsExactly(11)
+    }
+
     /** Routing without a voice session would duck every other app's audio. */
     @Test
     fun withoutAConnectionAChoiceIsOnlySaved() {

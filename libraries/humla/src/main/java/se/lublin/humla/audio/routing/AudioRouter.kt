@@ -24,7 +24,10 @@ import android.media.AudioDeviceInfo
  *
  * Default: the [preferred] device if it is a headset and there, then a Bluetooth headset if
  * [bluetoothAutomatic], then a wired headset, then the [preferred] built-in device, then the speaker.
- * A headset thus beats a saved built-in device.
+ * A device saved before the session counts as a pick made in it: when the router engages, a
+ * [preferred] device that is there becomes the [choice], so a saved built-in device beats a headset
+ * already present, while a headset that arrives later still takes over. That seeded choice lasts
+ * only as long as the preference it came from.
  * Everything is routed explicitly, because in communication mode the platform default is the
  * earpiece. [choice] overrides the default until its device goes away or a newly connected headset
  * (or the preferred one) takes over (newest wins). Only a change of the device set triggers a
@@ -45,12 +48,24 @@ internal class AudioRouter(
 
     var bluetoothAutomatic: Boolean = false
 
-    /** The device the user saved, across sessions; null for the automatic default alone. */
+    /**
+     * The device the user saved, across sessions; null for the automatic default alone. A new one
+     * drops a [choice] that only the old one had seeded; the next [apply] routes by it.
+     */
     var preferred: PreferredAudioDevice? = null
+        set(value) {
+            if (value == field) return
+            if (seeded != null && choice == seeded) choice = null
+            seeded = null
+            field = value
+        }
 
     /** The user's explicit pick, or null for the default. */
     var choice: Int? = null
         private set
+
+    /** The [choice] as [engage] took it from [preferred], while the user has not picked since. */
+    private var seeded: Int? = null
 
     var isEngaged: Boolean = false
         private set
@@ -80,7 +95,12 @@ internal class AudioRouter(
             devices.setCommunicationMode(true)
             modeHeld = true
         }
-        known = devices.available().mapTo(HashSet()) { it.id }
+        val available = devices.available()
+        known = available.mapTo(HashSet()) { it.id }
+        if (choice == null) {
+            seeded = preferred?.let { p -> available.firstOrNull(p::matches) }?.id
+            choice = seeded
+        }
         apply()
     }
 
@@ -95,11 +115,13 @@ internal class AudioRouter(
     }
 
     fun choose(id: Int) {
+        seeded = null
         choice = id
         apply()
     }
 
     fun forgetChoice() {
+        seeded = null
         choice = null
         apply()
     }
@@ -138,6 +160,7 @@ internal class AudioRouter(
         val chosen = available.firstOrNull { it.id == choice }
         val automatic = automatic(available)
         if (chosen == null || chosen.id == automatic?.id) choice = null
+        if (choice != seeded) seeded = null
         val target = if (choice != null) chosen else automatic
         if (target == null) {
             giveBack()
