@@ -76,21 +76,22 @@ class RealSpeechDeviceTest {
     }
 
     /**
-     * MEASUREMENT HARNESS: the shipped WEBRTC chain (AEC3+AGC2+HPF, then RNNoise) and APM alone,
-     * over the sweep's eight scenarios, synthetic reference pair against the four Piper pairs.
-     * Asserts only that every frame was taken; decides whether "RNNoise behind AEC3 closes the
-     * gate in double talk" holds for real speech.
+     * The shipped WEBRTC chain (AEC3+AGC2+HPF, then RNNoise) and APM alone, over the sweep's eight
+     * scenarios, synthetic reference pair against the four Piper pairs: decides whether "RNNoise
+     * behind AEC3 closes the gate in double talk" holds for real speech. The Piper pairs are held
+     * to loose characterization bounds around the measured numbers (see the class comment); the
+     * synthetic pair is bounded by [DoubleTalkAec3DeviceTest].
      */
     @Test
     fun shippedChainWithRealSpeech() {
         val factory = CapturePreprocessorFactory(log = { Log.w(DoubleTalkRig.TAG, it) })
         val chains = listOf<Pair<String, () -> CaptureChain>>(
-            "shipped" to { factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC) },
+            SHIPPED to { factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC) },
             "APM only" to { factory.create(NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC) },
         )
         log(HEADER)
         val voices = listOf(Talkers.SYNTHETIC to 0) + DoubleTalkRig.PIPER_PAIRS.indices.map { Talkers.PIPER to it }
-        val summary = ArrayList<String>()
+        val rows = ArrayList<ChainRow>()
         for ((name, build) in chains) {
             for ((corpus, pair) in voices) {
                 val nearAlone = DoubleTalkRig.runNearAlone(build(), NEAR_DBFS, pair, corpus)
@@ -98,25 +99,32 @@ class RealSpeechDeviceTest {
                     DoubleTalkRig.measure(it, build, nearAlone).also { m -> logMeasurement(name, it, m) }
                 }
                 val nearAloneGate = DoubleTalkRig.nearAloneGate(nearAlone, NEAR_DBFS, pair, corpus)
-                summary += String.format(
-                    Locale.ROOT,
-                    "%-9s %-9s #%d | gate %5.1f%% (min %3.0f%%) zeroed %5.1f%% | echo FO %5.1f%% " +
-                        "(max %4.1f%%) | near alone %5.1f%%",
-                    name, corpus, pair,
-                    100 * results.map { it.gateOpen }.average(), 100 * results.minOf { it.gateOpen },
-                    100 * results.map { it.zeroed }.average(), 100 * results.map { it.falseOpen }.average(),
-                    100 * results.maxOf { it.falseOpen }, 100 * nearAloneGate,
-                )
+                rows += ChainRow(name, corpus, pair, results, nearAloneGate)
             }
         }
         log("summary: chain, talkers | double-talk gate, zeroed voiced frames | echo-only false-open | near alone")
-        summary.forEach(::log)
+        rows.forEach { log(it.summary()) }
+        for (row in rows.filter { it.corpus == Talkers.PIPER }) {
+            val what = "${row.chain}, Piper pair #${row.pair}"
+            assertWithMessage("%s: near end alone, gate open", what).that(row.nearAloneGate).isAtLeast(0.9f)
+            assertWithMessage("%s: echo alone, mean false-open", what).that(row.falseOpen).isAtMost(0.15)
+            if (row.chain == SHIPPED) {
+                // Measured 66-81 % and 34-39 %: RNNoise still zeroes real near-end speech in double talk.
+                assertWithMessage("%s: double-talk gate, mean", what).that(row.gateOpen).isIn(Range.closed(0.55, 0.92))
+                assertWithMessage("%s: zeroed voiced frames, mean", what).that(row.zeroed).isIn(Range.closed(0.2, 0.55))
+            } else {
+                // Measured 82-90 % and none: without RNNoise nothing is zeroed.
+                assertWithMessage("%s: double-talk gate, mean", what).that(row.gateOpen).isAtLeast(0.72)
+                assertWithMessage("%s: zeroed voiced frames, mean", what).that(row.zeroed).isAtMost(0.05)
+            }
+        }
     }
 
     /**
-     * MEASUREMENT HARNESS: RNNoise's attenuation limit (AGC2 in front, as shipped) over the four
-     * Piper pairs: double talk, echo alone, pink noise, real-speech babble and the near end alone.
-     * Asserts only that every frame was taken. Takes many minutes.
+     * RNNoise's attenuation limit (AGC2 in front, as shipped) over the four Piper pairs: double
+     * talk, echo alone, pink noise, real-speech babble and the near end alone, held to loose
+     * characterization bounds around the measured numbers (see the class comment). Takes many
+     * minutes.
      */
     @Test
     fun attenuationLimitSweepWithRealSpeech() {
@@ -162,6 +170,54 @@ class RealSpeechDeviceTest {
                 ),
             )
         }
+        assertSweepBounds(results, base)
+    }
+
+    /** Loose characterization bounds around the numbers in the class comment. */
+    private fun assertSweepBounds(results: Map<Float, Sweep>, base: List<DoubleTalkRig.Measurement>) {
+        val baseGate = base.map { it.gateOpen }.average()
+        for ((limit, sweep) in results) {
+            val name = limitName(limit)
+            val mine = sweep.perPair.flatMap { it.doubleTalk }
+            assertWithMessage("%s: near end alone, gate open", name)
+                .that(sweep.perPair.map { it.nearAloneGate }.average()).isAtLeast(0.9)
+            assertWithMessage("%s: pink noise, false-open", name).that(sweep.pink.falseOpen).isAtMost(0.02f)
+            // Measured 84-92 %: no limit keeps real babble out of the gate.
+            assertWithMessage("%s: real babble, false-open", name).that(sweep.babble.falseOpen).isAtLeast(0.6f)
+            if (limit.isInfinite()) continue
+            // Measured 85-86 % against 74 % without a limit.
+            assertWithMessage("%s: double-talk gate, mean, over no limit's", name)
+                .that(mine.map { it.gateOpen }.average() - baseGate).isAtLeast(0.05)
+            // Measured within 2 dB of the input level minus the limit.
+            val expected = sweep.pink.inputDbfs - limit.toDouble()
+            assertWithMessage("%s: pink noise residual (dBFS)", name).that(sweep.pink.residualDbfs.toDouble())
+                .isIn(Range.closed(expected - RESIDUAL_TOLERANCE_DB, expected + RESIDUAL_TOLERANCE_DB))
+            if (limit <= 18f) {
+                // Measured +0.4 points at 12 and 18 dB (+3.6 at 24, +7.2 at 30, not bounded).
+                assertWithMessage("%s: echo false-open, worst scenario over no limit's", name)
+                    .that(mine.indices.maxOf { mine[it].falseOpen - base[it].falseOpen }).isAtMost(0.03f)
+            }
+        }
+    }
+
+    private class ChainRow(
+        val chain: String,
+        val corpus: Talkers,
+        val pair: Int,
+        val results: List<DoubleTalkRig.Measurement>,
+        val nearAloneGate: Float,
+    ) {
+        val gateOpen = results.map { it.gateOpen }.average()
+        val zeroed = results.map { it.zeroed }.average()
+        val falseOpen = results.map { it.falseOpen }.average()
+
+        fun summary(): String = String.format(
+            Locale.ROOT,
+            "%-9s %-9s #%d | gate %5.1f%% (min %3.0f%%) zeroed %5.1f%% | echo FO %5.1f%% " +
+                "(max %4.1f%%) | near alone %5.1f%%",
+            chain, corpus, pair, 100 * gateOpen, 100 * results.minOf { it.gateOpen }, 100 * zeroed,
+            100 * falseOpen, 100 * results.maxOf { it.falseOpen }, 100 * nearAloneGate,
+        )
     }
 
     private class Results(val doubleTalk: List<DoubleTalkRig.Measurement>, val nearAloneGate: Float)
@@ -189,6 +245,8 @@ class RealSpeechDeviceTest {
     }
 
     private companion object {
+        const val SHIPPED = "shipped"
+        const val RESIDUAL_TOLERANCE_DB = 6.0
         const val NEAR_DBFS = -26f
         const val NOISE_DBFS = -45f
         const val CLIP_SECONDS = 12
