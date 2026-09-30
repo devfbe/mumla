@@ -84,7 +84,7 @@ class RealSpeechDeviceTest {
      */
     @Test
     fun shippedChainWithRealSpeech() {
-        val factory = CapturePreprocessorFactory(log = { Log.w(DoubleTalkRig.TAG, it) })
+        val factory = CapturePreprocessorFactory(log = { Log.w(DoubleTalkRig.TAG, it) }, clock = DoubleTalkRig.clock)
         val chains = listOf<Pair<String, () -> CaptureChain>>(
             SHIPPED to { factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC) },
             UNLIMITED to { DoubleTalkRig.limitedChain(Float.POSITIVE_INFINITY, agcAfter = false) },
@@ -111,9 +111,10 @@ class RealSpeechDeviceTest {
             assertWithMessage("%s: echo alone, mean false-open", what).that(row.falseOpen).isAtMost(0.15)
             when (row.chain) {
                 SHIPPED -> {
-                    // The shipped chain is limitedChain(18 dB, AGC2 in front), which the sweep below
-                    // measured at 85-86 % mean gate; the limit keeps RNNoise from zeroing the near end
-                    // (0 % zeroed in DoubleTalkAec3DeviceTest). Bounded per pair a little below that.
+                    // The shipped chain is limitedChain(18 dB, AGC2 in front) plus the double-talk
+                    // relief; the sweep below measured the former at 85-86 % mean gate, and the
+                    // relief only eases RNNoise further. The limit keeps RNNoise from zeroing the near
+                    // end (0 % zeroed in DoubleTalkAec3DeviceTest). Bounded per pair a little below that.
                     assertWithMessage("%s: double-talk gate, mean", what).that(row.gateOpen).isAtLeast(SHIPPED_MIN_GATE)
                     assertWithMessage("%s: zeroed voiced frames, mean", what).that(row.zeroed).isAtMost(0.05)
                 }
@@ -130,6 +131,14 @@ class RealSpeechDeviceTest {
                     assertWithMessage("%s: zeroed voiced frames, mean", what).that(row.zeroed).isAtMost(0.05)
                 }
             }
+        }
+        // PROVISIONAL until a phone run: the double-talk relief must give the near end back what
+        // unlimited RNNoise takes (11 dB for the room's mid talker, offline).
+        for (pair in DoubleTalkRig.PIPER_PAIRS.indices) {
+            val shipped = rows.single { it.chain == SHIPPED && it.corpus == Talkers.PIPER && it.pair == pair }
+            val unlimited = rows.single { it.chain == UNLIMITED && it.corpus == Talkers.PIPER && it.pair == pair }
+            assertWithMessage("Piper pair #%s: near end kept in double talk, shipped over no limit (dB)", pair)
+                .that(shipped.retention - unlimited.retention).isAtLeast(MIN_RETENTION_GAIN_DB)
         }
     }
 
@@ -223,13 +232,15 @@ class RealSpeechDeviceTest {
         val gateOpen = results.map { it.gateOpen }.average()
         val zeroed = results.map { it.zeroed }.average()
         val falseOpen = results.map { it.falseOpen }.average()
+        val retention = results.map { it.retentionDb }.average()
+        val dropped = results.map { it.droppedShare }.average()
 
         fun summary(): String = String.format(
             Locale.ROOT,
             "%-9s %-9s #%d | gate %5.1f%% (min %3.0f%%) zeroed %5.1f%% | echo FO %5.1f%% " +
-                "(max %4.1f%%) | near alone %5.1f%%",
+                "(max %4.1f%%) | near alone %5.1f%% | retained %+5.1f dB, dropped %4.1f%%",
             chain, corpus, pair, 100 * gateOpen, 100 * results.minOf { it.gateOpen }, 100 * zeroed,
-            100 * falseOpen, 100 * results.maxOf { it.falseOpen }, 100 * nearAloneGate,
+            100 * falseOpen, 100 * results.maxOf { it.falseOpen }, 100 * nearAloneGate, retention, 100 * dropped,
         )
     }
 
@@ -250,9 +261,11 @@ class RealSpeechDeviceTest {
         log(
             String.format(
                 Locale.ROOT,
-                "%-19s %-38s %6.1f  | %+6.1f  %4.0f%%  %4.0f%%  | %6.1f %6.1f  %4.1f%% (%4.0f%%)",
+                "%-19s %-38s %6.1f  | %+6.1f  %4.0f%%  %4.0f%%  | %6.1f %6.1f  %4.1f%% (%4.0f%%) | " +
+                    "%+6.1f (%+6.1f)  %3.0f%% %4.1f/s",
                 name, scenario.name, m.echoInDbfs, m.keptDb, 100 * m.gateOpen, 100 * m.zeroed,
                 m.residualDbfs, m.residualP95Dbfs, 100 * m.falseOpen, 100 * m.falseOpenConverging,
+                m.retentionDb, m.retentionMedianDb, 100 * m.droppedShare, m.dropoutsPerSecond,
             ),
         )
     }
@@ -261,6 +274,9 @@ class RealSpeechDeviceTest {
         const val SHIPPED = "shipped"
         const val UNLIMITED = "no limit"
         const val SHIPPED_MIN_GATE = 0.72
+
+        /** Provisional, not yet measured on a phone; see [shippedChainWithRealSpeech]. */
+        const val MIN_RETENTION_GAIN_DB = 3.0
         const val RESIDUAL_TOLERANCE_DB = 6.0
         const val NEAR_DBFS = -26f
         const val NOISE_DBFS = -45f
@@ -268,7 +284,8 @@ class RealSpeechDeviceTest {
         const val ACTIVE_RANGE_DB = 20f
 
         const val HEADER = "chain               scenario                               echo-in  | " +
-            "DT: kept  gate  zeroed | echo only: resid  p95   false-open (0-2 s)"
+            "DT: kept  gate  zeroed | echo only: resid  p95   false-open (0-2 s) | " +
+            "retained (median) dropped, per s"
 
         val LIMITS = listOf(Float.POSITIVE_INFINITY, 12f, 18f, 24f, 30f)
 

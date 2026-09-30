@@ -44,8 +44,13 @@ import kotlin.random.Random
  * - A: mic = echo + near + noise (what the phone records),
  * - B: mic = echo + noise (A without the near end: the echo-only case),
  * - C: mic = near + noise, far-end reference silent (the near end as the chain passes it alone).
- * Near-end retention in a phase is `10*log10((P_A - P_B) / P_C)`. The gate is the app's default
- * adaptive VAD (`VadConfig.adaptive`, onset 2 frames) on the chain's output.
+ * Near-end retention in a phase is `10*log10((P_A - P_B) / P_C)` ([Measurement.keptDb]), and, robust
+ * to the echo, A's projection onto C over the voiced double-talk frames ([NearEndRetention]:
+ * [Measurement.retentionDb], dropouts). The gate is the app's default adaptive VAD
+ * (`VadConfig.adaptive`, onset 2 frames) on the chain's output.
+ *
+ * The replay runs faster than real time, so chains built for it take [clock], which [run] advances
+ * by 10 ms per frame (the double-talk relief's far-end hold is timed by it).
  */
 internal object DoubleTalkRig {
     const val TAG = "DoubleTalk"
@@ -70,6 +75,16 @@ internal object DoubleTalkRig {
 
     /** Echo-only statistics skip AEC3's first two seconds of convergence (reported separately). */
     const val CONVERGED_FRAME = 2 * FRAMES_PER_SECOND
+
+    /** Replay time: [run] sets it to 0 and advances it by one frame per frame. */
+    class ReplayClock : NanoClock {
+        @Volatile
+        var now: Long = 0L
+
+        override fun nanoTime(): Long = now
+    }
+
+    val clock = ReplayClock()
 
     /**
      * The loudspeaker-to-microphone path.
@@ -160,12 +175,13 @@ internal object DoubleTalkRig {
         return (dtStart until dtEnd).filter { dbfs(meanPower(near, it, it + 1)) > nearDbfs - 10f }
     }
 
-    /** Per-frame output power, the gate trace and a hash of every output sample of one run. */
+    /** Per-frame output power, the gate trace, every output sample and their hash, of one run. */
     class Run(frames: Int) {
         val power = DoubleArray(frames)
         val transmit = BooleanArray(frames)
         val floor = FloatArray(frames)
         val threshold = FloatArray(frames)
+        val samples = ShortArray(frames * FRAME)
         var hash = 0L
     }
 
@@ -203,8 +219,8 @@ internal object DoubleTalkRig {
     fun run(chain: CaptureChain, farEnd: FloatArray, mic: FloatArray): Run {
         val apm = chain.farEndSink as WebRtcApmPreprocessor?
         val chunker = apm?.let { FarEndFrameChunker(chain.farEndFrameSize, it) }
-        var now = 0L
-        val vad = VoiceActivityDetector(VadConfig.adaptive(onsetFrames = APP_ONSET_FRAMES)) { now }
+        clock.now = 0L
+        val vad = VoiceActivityDetector(VadConfig.adaptive(onsetFrames = APP_ONSET_FRAMES), clock = clock)
         val result = Run(frames)
         val render = ShortArray(FRAME)
         val capture = ShortArray(FRAME)
@@ -216,6 +232,7 @@ internal object DoubleTalkRig {
                 // Per tick the far-end frame goes in before the capture frame holding its echo.
                 chunker?.push(render, FRAME)
                 chain.preprocessor.process(capture)
+                System.arraycopy(capture, 0, result.samples, f * FRAME, FRAME)
                 var sumSquares = 0.0
                 for (s in capture) {
                     sumSquares += s.toDouble() * s
@@ -225,7 +242,7 @@ internal object DoubleTalkRig {
                 result.transmit[f] = vad.isVoice(capture, FRAME, null)
                 result.floor[f] = vad.floorDbfs
                 result.threshold[f] = vad.thresholdDbfs
-                now += FRAME_MS * NANOS_PER_MS
+                clock.now += FRAME_MS * NANOS_PER_MS
             }
             if (apm != null) {
                 assertThat(apm.rejectedFrames).isEqualTo(0)
@@ -309,6 +326,17 @@ internal object DoubleTalkRig {
         val falseOpenConverging: Float,
         /** Echo level at the microphone during far end only, dBFS. */
         val echoInDbfs: Float,
+        /**
+         * Near-end level kept in double talk against the near end alone (run C), dB, by projection
+         * over the voiced double-talk frames ([NearEndRetention]); blind to the echo, unlike [keptDb].
+         */
+        val retentionDb: Double,
+        /** The same, median 100 ms block. */
+        val retentionMedianDb: Double,
+        /** Share of voiced double-talk frames more than 20 dB below the near end alone. */
+        val droppedShare: Double,
+        /** Runs of such frames per second of voiced double talk. */
+        val dropoutsPerSecond: Double,
     )
 
     /** The microphone signals of runs A (echo + near + noise) and B (echo + noise) for one scenario. */
@@ -338,6 +366,8 @@ internal object DoubleTalkRig {
         val voiced = voicedDoubleTalkFrames(scenario.nearDbfs, scenario.talkers, scenario.corpus)
         val echoOnly = CONVERGED_FRAME until dtEnd
         val levels = echoOnly.map { dbfs(b.power[it]) }.sorted()
+        val starts = IntArray(voiced.size) { voiced[it] * FRAME }
+        val retention = NearEndRetention.measure(a.samples, c.samples, starts, starts, FRAME)
         return Measurement(
             keptDb = kept,
             gateOpen = voiced.count { a.transmit[it] }.toFloat() / voiced.size,
@@ -347,6 +377,10 @@ internal object DoubleTalkRig {
             falseOpen = echoOnly.count { b.transmit[it] }.toFloat() / (echoOnly.last + 1 - echoOnly.first),
             falseOpenConverging = (0 until CONVERGED_FRAME).count { b.transmit[it] }.toFloat() / CONVERGED_FRAME,
             echoInDbfs = mics.echoInDbfs,
+            retentionDb = retention.retentionDb,
+            retentionMedianDb = retention.medianBlockDb,
+            droppedShare = retention.droppedShare,
+            dropoutsPerSecond = retention.dropoutsPerSecond,
         )
     }
 

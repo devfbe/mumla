@@ -130,10 +130,14 @@ class DoubleTalkAec3DeviceTest {
      * over the sweep's eight scenarios, and the finding behind the limit. Bounds sit outside what
      * the SM-S938B measured (see the constants), so a tuning or chain change that spams echo or
      * closes the gate again fails here.
+     *
+     * Since the double-talk relief ([DoubleTalkRelief]) the shipped chain eases RNNoise while the
+     * near end talks over the far end. The bounds below were measured before it and still hold the
+     * line it must not cross; the retention bound is provisional. Both need a phone run.
      */
     @Test
     fun shippedChainInDoubleTalk() {
-        val factory = CapturePreprocessorFactory(log = { Log.w(DoubleTalkRig.TAG, it) })
+        val factory = CapturePreprocessorFactory(log = { Log.w(DoubleTalkRig.TAG, it) }, clock = DoubleTalkRig.clock)
         val shipped = { factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC) }
         val unlimited = { DoubleTalkRig.limitedChain(Float.POSITIVE_INFINITY, agcAfter = false) }
         val apmOnly = { factory.create(NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC) }
@@ -174,6 +178,11 @@ class DoubleTalkAec3DeviceTest {
             assertWithMessage("18 dB zeroes no voiced near-end frame, %s", name).that(f.shipped.zeroed).isAtMost(0.02f)
             assertWithMessage("18 dB opens the gate more than unlimited, %s", name)
                 .that(f.shipped.gateOpen - f.unlimited.gateOpen).isAtLeast(SHIPPED_MIN_GAIN)
+            // PROVISIONAL until a phone run of the double-talk relief: it gave the room's mid talker
+            // 11 dB back (RoomAcousticsDeviceTest recordings, offline); here it must at least beat
+            // unlimited RNNoise, which zeroes half of these frames.
+            assertWithMessage("the shipped chain keeps more of the near end than unlimited RNNoise, %s", name)
+                .that(f.shipped.retentionDb - f.unlimited.retentionDb).isAtLeast(SHIPPED_MIN_RETENTION_GAIN_DB)
         }
     }
 
@@ -230,9 +239,11 @@ class DoubleTalkAec3DeviceTest {
         log(
             String.format(
                 Locale.ROOT,
-                "%-19s %-32s %6.1f  | %+6.1f  %4.0f%%  %4.0f%%  | %6.1f %6.1f  %4.1f%% (%4.0f%%)",
+                "%-19s %-32s %6.1f  | %+6.1f  %4.0f%%  %4.0f%%  | %6.1f %6.1f  %4.1f%% (%4.0f%%) | " +
+                    "retained %+6.1f dB (median %+6.1f), dropped %3.0f%%, %4.1f/s",
                 name, scenario.name, m.echoInDbfs, m.keptDb, 100 * m.gateOpen, 100 * m.zeroed,
                 m.residualDbfs, m.residualP95Dbfs, 100 * m.falseOpen, 100 * m.falseOpenConverging,
+                m.retentionDb, m.retentionMedianDb, 100 * m.droppedShare, m.dropoutsPerSecond,
             ),
         )
     }
@@ -288,7 +299,7 @@ class DoubleTalkAec3DeviceTest {
     }
 
     private fun build(chain: Chain): CaptureChain {
-        val factory = CapturePreprocessorFactory(log = { Log.w(DoubleTalkRig.TAG, it) })
+        val factory = CapturePreprocessorFactory(log = { Log.w(DoubleTalkRig.TAG, it) }, clock = DoubleTalkRig.clock)
         return when (chain) {
             Chain.APP_APM -> factory.create(NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC)
             Chain.APP_APM_RNNOISE -> factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC)
@@ -323,6 +334,9 @@ class DoubleTalkAec3DeviceTest {
         const val SHIPPED_MAX_FALSE_OPEN = 0.45f
         const val SHIPPED_MIN_GATE = 0.55f
         const val SHIPPED_MIN_GAIN = 0.25f
+
+        /** Provisional, see [shippedChainInDoubleTalk]; not yet measured on a phone. */
+        const val SHIPPED_MIN_RETENTION_GAIN_DB = 3.0
 
         /** Talker pairs the sweep runs; 1 for a quick look, 3 for a decision. */
         const val SWEEP_TALKERS = 1

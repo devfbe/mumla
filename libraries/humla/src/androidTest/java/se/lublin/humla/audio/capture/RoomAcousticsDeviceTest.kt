@@ -123,6 +123,11 @@ import kotlin.math.sqrt
  *   RNNoise without a limit (the chain shipped until then) DT 94 / 60 / 17 %, near end alone
  *   98 / 97 / 21 %; limited to 18 dB DT 97 / 91 / 80 %, near alone 98 / 99 / 96 %, FO still 0 %.
  *   This is why 18 dB is the shipped default ("shipped" below; "no limit" is the old chain).
+ * - Retention (the same words in double talk against alone, [NearEndRetention]), the recordings
+ *   replayed offline on an x86-64 build of the same native code: 18 dB kept the near end at -5 / -13
+ *   / -4 dB, RNNoise costing the mid talker 8 dB of it (AGC2 3, the platform 1-2, AEC3 under 1).
+ *   Since then "shipped" eases RNNoise while the user talks over the far end ([DoubleTalkRelief]):
+ *   -4 / -2 / +14 dB, echo alone unchanged; "limit18" is the chain without the relief.
  * - VOICE_RECOGNITION and UNPROCESSED hear everything (no zeros); AEC3 converges (ERLE 32-38 dB),
  *   echo delay as AEC3 sees it about 290 ms. No limit DT 44-48 / 42-43 / 33-53 %, FO 0-15 %;
  *   limited to 18 dB DT 84-87 / 51-53 / 37 %, FO 0-12 %, residual -66 to -87 dBFS.
@@ -214,6 +219,20 @@ class RoomAcousticsDeviceTest {
         }
         assertWithMessage("configurations in which the PC's near end was found")
             .that(rows.count { it.raw.nearFound }).isAtLeast(1)
+        // PROVISIONAL until the next room run: on the app's configuration the double-talk relief
+        // kept the near end at -4 / -2 / +14 dB (loud / -12 / -20 dB talker, the 2026-09-30
+        // recordings replayed offline) against -5 / -13 / -4 dB without it, with echo alone still
+        // never transmitted.
+        for (row in rows.filter { it.config.name == APP_CONFIG && it.raw.nearFound }) {
+            val shipped = row.chains.getValue("shipped")
+            val before = row.chains.getValue("limit18")
+            assertWithMessage("app configuration: double-talk retention (dB), relief over none")
+                .that(shipped.retention.retentionDb - before.retention.retentionDb).isAtLeast(0.0)
+            assertWithMessage("app configuration: double-talk retention (dB)")
+                .that(shipped.retention.retentionDb).isAtLeast(MIN_APP_RETENTION_DB)
+            assertWithMessage("app configuration: echo alone transmitted, relief over none")
+                .that(shipped.echoFalseOpen - before.echoFalseOpen).isAtMost(MAX_APP_FALSE_OPEN_RISE)
+        }
     }
 
     /**
@@ -411,6 +430,7 @@ class RoomAcousticsDeviceTest {
     )
 
     /** One chain on one recording. */
+    @Suppress("LongParameterList") // a plain record of the numbers the table reports
     private class ChainResult(
         val nearAloneGate: Double,
         val doubleTalkGate: Double,
@@ -418,6 +438,8 @@ class RoomAcousticsDeviceTest {
         val echoFalseOpenConverging: Double,
         val residualDbfs: Float,
         val residualP95Dbfs: Float,
+        /** The same words in double talk against alone, through this chain ([NearEndRetention]). */
+        val retention: NearEndRetention.Result,
     )
 
     private inner class Row(
@@ -444,9 +466,12 @@ class RoomAcousticsDeviceTest {
                     String.format(
                         Locale.ROOT,
                         "%-32s %-7s | near alone %5.1f%% | DT gate %5.1f%% | echo FO %5.1f%% (0-2 s %5.1f%%) | " +
-                            "residual %6.1f dBFS, p95 %6.1f",
+                            "residual %6.1f dBFS, p95 %6.1f | DT retained %+5.1f dB (median %+5.1f), " +
+                            "dropped %3.0f%%, %4.1f/s",
                         config.name, chain, 100 * r.nearAloneGate, 100 * r.doubleTalkGate, 100 * r.echoFalseOpen,
                         100 * r.echoFalseOpenConverging, r.residualDbfs, r.residualP95Dbfs,
+                        r.retention.retentionDb, r.retention.medianBlockDb, 100 * r.retention.droppedShare,
+                        r.retention.dropoutsPerSecond,
                     ),
                 )
             }
@@ -465,6 +490,18 @@ class RoomAcousticsDeviceTest {
         val echoOnly = (FAR_START_FRAME + CONVERGE_FRAMES) until minOf(nearBStartFrame, FAR_END_FRAME)
         val converging = FAR_START_FRAME until FAR_START_FRAME + CONVERGE_FRAMES
         val doubleTalkSpan = nearBStartFrame until minOf(nearBStartFrame + clipFrames, FAR_END_FRAME)
+
+        /**
+         * Clip frames voiced in both copies, the first copy before the far end starts and the second
+         * before it ends: where each starts in the recording, second copy and first.
+         */
+        val sameWords: Pair<IntArray, IntArray> = run {
+            val k = near.voiced.indices.filter {
+                near.voiced[it] && nearStartSample + (it + 1) * FRAME <= FAR_START_FRAME * FRAME &&
+                    nearBStart + (it + 1) * FRAME <= FAR_END_FRAME * FRAME
+            }
+            IntArray(k.size) { nearBStart + k[it] * FRAME } to IntArray(k.size) { nearStartSample + k[it] * FRAME }
+        }
 
         private fun voicedFrames(start: Int, near: Near): List<Int> = (0 until FRAMES).filter { f ->
             val k = (f * FRAME - start).floorDiv(FRAME)
@@ -513,9 +550,11 @@ class RoomAcousticsDeviceTest {
             erleFirstDb = erle(inPower, aec.power, w.converging.first until w.converging.first + FRAMES_PER_SECOND),
             erleDb = erle(inPower, aec.power, w.echoOnly),
         )
-        val factory = CapturePreprocessorFactory(log = { Log.w(TAG, it) })
+        // The replay runs faster than real time; the relief's far-end hold follows its clock.
+        val factory = CapturePreprocessorFactory(log = { Log.w(TAG, it) }, clock = DoubleTalkRig.clock)
         val chains = linkedMapOf<String, () -> CaptureChain>(
             "shipped" to { factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC) },
+            "limit18" to { DoubleTalkRig.limitedChain(RnnoisePreprocessor.ATTENUATION_LIMIT_DB, agcAfter = false) },
             "nolimit" to { DoubleTalkRig.limitedChain(Float.POSITIVE_INFINITY, agcAfter = false) },
             "apm" to { factory.create(NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC) },
         ).mapValues { (_, build) -> measure(replay(build(), capture, far), w) }
@@ -531,6 +570,9 @@ class RoomAcousticsDeviceTest {
             echoFalseOpenConverging = share(w.converging.toList()) { run.transmit[it] },
             residualDbfs = dbfs(w.echoOnly.map { run.power[it] }.average()),
             residualP95Dbfs = levels.getOrElse((levels.size * P95).toInt()) { Float.NaN },
+            retention = NearEndRetention.measure(
+                run.samples, run.samples, w.sameWords.first, w.sameWords.second, FRAME,
+            ),
         )
     }
 
@@ -549,8 +591,9 @@ class RoomAcousticsDeviceTest {
      */
     private fun replay(chain: CaptureChain, capture: Capture, far: ShortArray): DoubleTalkRig.Run {
         val chunker = chain.farEndSink?.let { FarEndFrameChunker(chain.farEndFrameSize, it) }
-        var now = 0L
-        val vad = VoiceActivityDetector(VadConfig.adaptive(onsetFrames = APP_ONSET_FRAMES)) { now }
+        val clock = DoubleTalkRig.clock
+        clock.now = 0L
+        val vad = VoiceActivityDetector(VadConfig.adaptive(onsetFrames = APP_ONSET_FRAMES), clock = clock)
         val run = DoubleTalkRig.Run(FRAMES)
         val frame = ShortArray(FRAME)
         val reference = ShortArray(FRAME)
@@ -566,9 +609,10 @@ class RoomAcousticsDeviceTest {
                 while (pushed < capture.refPushed[f]) pushReference()
                 System.arraycopy(capture.pcm, f * FRAME, frame, 0, FRAME)
                 val probability = chain.preprocessor.process(frame)
+                System.arraycopy(frame, 0, run.samples, f * FRAME, FRAME)
                 run.power[f] = framePower(frame, 0)
                 run.transmit[f] = vad.isVoice(frame, FRAME, probability)
-                now += FRAME_MS * NANOS_PER_MS
+                clock.now += FRAME_MS * NANOS_PER_MS
             }
         } finally {
             chain.preprocessor.release()
@@ -621,11 +665,15 @@ class RoomAcousticsDeviceTest {
     // ---- output -------------------------------------------------------------------------------
 
     private fun summarize(rows: List<Row>) {
-        log("summary: config | zeros near/echo/DT | echo in, delay, ERLE | chain: near alone, DT gate, echo FO, resid")
+        log(
+            "summary: config | zeros near/echo/DT | echo in, delay, ERLE | " +
+                "chain: near alone, DT gate, echo FO, resid, DT retained dB, dropped",
+        )
         val csv = StringBuilder(
             "config,routed,effects,near_found,near_offset_ms,near_dbfs,echo_dbfs,zeros_near,zeros_echo,zeros_dt," +
                 "echo_delay_ms,erle_first_db,erle_db,chain,near_alone_gate,dt_gate,echo_fo,echo_fo_converging," +
-                "residual_dbfs,residual_p95_dbfs\n",
+                "residual_dbfs,residual_p95_dbfs,dt_retention_db,dt_retention_median_db,dt_dropped," +
+                "dt_dropouts_per_s\n",
         )
         for (row in rows) {
             val r = row.raw
@@ -634,10 +682,10 @@ class RoomAcousticsDeviceTest {
                     String.format(
                         Locale.ROOT,
                         "%-32s | %3.0f/%3.0f/%3.0f%% | %6.1f dBFS %5.0f ms %5.1f dB | " +
-                            "%-7s %5.1f%% %5.1f%% %5.1f%% %6.1f",
+                            "%-7s %5.1f%% %5.1f%% %5.1f%% %6.1f %+5.1f %3.0f%%",
                         row.config.name, 100 * r.zeros.first, 100 * r.zeros.second, 100 * r.zeros.third,
                         r.echoDbfs, r.echoDelayMs, r.erleDb, chain, 100 * c.nearAloneGate, 100 * c.doubleTalkGate,
-                        100 * c.echoFalseOpen, c.residualDbfs,
+                        100 * c.echoFalseOpen, c.residualDbfs, c.retention.retentionDb, 100 * c.retention.droppedShare,
                     ),
                 )
                 csv.append(
@@ -646,6 +694,8 @@ class RoomAcousticsDeviceTest {
                         r.nearOffsetMs, r.nearDbfs, r.echoDbfs, r.zeros.first, r.zeros.second, r.zeros.third,
                         r.echoDelayMs, r.erleFirstDb, r.erleDb, chain, c.nearAloneGate, c.doubleTalkGate,
                         c.echoFalseOpen, c.echoFalseOpenConverging, c.residualDbfs, c.residualP95Dbfs,
+                        c.retention.retentionDb, c.retention.medianBlockDb, c.retention.droppedShare,
+                        c.retention.dropoutsPerSecond,
                     ).joinToString(",", postfix = "\n"),
                 )
             }
@@ -712,6 +762,13 @@ class RoomAcousticsDeviceTest {
 
     private companion object {
         const val TAG = "RoomTest"
+
+        /** The configuration the app records with. */
+        const val APP_CONFIG = "VOICE_COMMUNICATION/COMM/default"
+
+        /** Provisional bounds, see [captureConfigurationsInARealRoom]. */
+        const val MIN_APP_RETENTION_DB = -8.0
+        const val MAX_APP_FALSE_OPEN_RISE = 0.01
         const val ENABLE_PROPERTY = "debug.mumla.roomtest"
         const val ONLY_PROPERTY = "debug.mumla.roomtest.only"
         const val PULLED_PROPERTY = "debug.mumla.roomtest.pulled"
