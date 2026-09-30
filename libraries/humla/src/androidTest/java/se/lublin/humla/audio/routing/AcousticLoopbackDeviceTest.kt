@@ -63,13 +63,22 @@ import kotlin.math.sqrt
  * Real acoustics on the phone: a probe (a 1 s log sweep, 200 Hz to 8 kHz) played on the voice-call
  * path the app uses (`USAGE_VOICE_COMMUNICATION` in `MODE_IN_COMMUNICATION`, routed with
  * [AndroidCommunicationDevices] or the app's [AudioRouter]) and recorded back from several capture
- * sources. A matched filter finds it; it counts as heard when, for the best source, it comes back
- * [OVER_SILENCE_DB] above what the same recording finds with silence played (absolute, not
- * relative to the recording's noise: this phone's capture gates quiet input to digital zeros).
+ * sources. A matched filter finds it. A source hears it when all of these hold (see [isHeard]):
+ * - the peak stands [MIN_PEAK_DB] above the rest of the correlation (a gated or noise-only
+ *   recording reaches 18-28 dB on this phone, a heard sweep 40-60 dB);
+ * - it lies where the sweep can be: 0 to [MAX_LATENCY_MS] after it was played;
+ * - its loop gain is [OVER_SILENCE_DB] above the silence run's, taken no lower than
+ *   [SILENCE_FLOOR_DB] (a gated source returns exact zeros for silence, which alone would put any
+ *   non-zero sample hundreds of dB "above silence").
+ *
+ * The asserted source is UNPROCESSED where the phone supports it (the raw microphone, so the
+ * test measures the route, not the platform's voice processing); elsewhere any source that hears
+ * it. The app's own source, VOICE_COMMUNICATION, is only logged: the platform may gate it.
  *
  * Every recording is also written as a WAV to the test APK's external files directory
  * (`/sdcard/Android/data/se.lublin.humla.test/files/loopback`), and every number goes to logcat
- * (tag [TAG]). Needs a phone without a headset, and a quiet room.
+ * (tag [TAG]). Needs a phone without a headset, and a quiet room. Sets the test package's
+ * RECORD_AUDIO app op to allow and restores it afterwards.
  *
  * Measured on an SM-S938B (2026-09-30, voice-call volume at maximum):
  * - Earpiece, routed directly or by [AudioRouter] with the earpiece saved and no headset: the
@@ -95,6 +104,9 @@ class AcousticLoopbackDeviceTest {
     private var savedMode = 0
     private var savedDevice: AudioDeviceInfo? = null
     private var savedVolume = 0
+    private var savedAppOp: String? = null
+    private val unprocessedSupported =
+        audioManager.getProperty(AudioManager.PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED) == "true"
 
     @Before
     fun setUp() {
@@ -103,13 +115,17 @@ class AcousticLoopbackDeviceTest {
         // test process, which has no activity, record without being silenced as a background app.
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
         automation.grantRuntimePermission(context.packageName, Manifest.permission.RECORD_AUDIO)
-        val appOp = automation.executeShellCommand("appops set ${context.packageName} RECORD_AUDIO allow")
-        ParcelFileDescriptor.AutoCloseInputStream(appOp).use { it.readBytes() } // waits for the command
+        val appOp = shell("appops get ${context.packageName} RECORD_AUDIO")
+        savedAppOp = APP_OP_MODE.find(appOp)?.groupValues?.get(1) ?: "default"
+        shell("appops set ${context.packageName} RECORD_AUDIO allow")
         savedMode = audioManager.mode
         savedDevice = audioManager.communicationDevice
         savedVolume = audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
         val available = audioManager.availableCommunicationDevices.map { it.type }
-        log("mode $savedMode, route ${savedDevice?.type}, voice-call volume $savedVolume, devices $available")
+        log(
+            "mode $savedMode, route ${savedDevice?.type}, voice-call volume $savedVolume, devices $available, " +
+                "RECORD_AUDIO app op was $savedAppOp, UNPROCESSED supported $unprocessedSupported",
+        )
         assumeTrue(
             "a headset is connected; these tests measure the phone's own speaker and earpiece",
             available.none { it in AudioRouter.WIRED || it in AudioRouter.BLUETOOTH },
@@ -125,7 +141,11 @@ class AcousticLoopbackDeviceTest {
         val device = savedDevice
         if (device == null) audioManager.clearCommunicationDevice() else audioManager.setCommunicationDevice(device)
         audioManager.mode = savedMode
-        log("restored: mode ${audioManager.mode}, route ${audioManager.communicationDevice?.type}")
+        savedAppOp?.let { shell("appops set ${context.packageName} RECORD_AUDIO $it") }
+        log(
+            "restored: mode ${audioManager.mode}, route ${audioManager.communicationDevice?.type}, " +
+                "RECORD_AUDIO app op ${shell("appops get ${context.packageName} RECORD_AUDIO").trim()}",
+        )
     }
 
     @Test
@@ -195,19 +215,28 @@ class AcousticLoopbackDeviceTest {
         probeOnCurrentRoute(type, label)
     }
 
-    /** Silence, then the probe, recorded as the app records and as the raw microphone. */
+    /** Silence, then the probe, recorded as the app records and as the raw microphone; see [isHeard]. */
     private fun probeOnCurrentRoute(type: Int, label: String) {
-        val results = SOURCES.map { (source, sourceName) ->
+        val sources = SOURCES.filter { (source, _) ->
+            source != MediaRecorder.AudioSource.UNPROCESSED || unprocessedSupported
+        }
+        val results = sources.mapNotNull { (source, sourceName) ->
+            // The app's source must record; another one this phone cannot open is skipped.
+            val optional = source != MediaRecorder.AudioSource.VOICE_COMMUNICATION
             val silent = loopback(FloatArray(probe.size), source, "$label-$sourceName-silence")
+                ?: return@mapNotNull skipped(label, sourceName, optional)
             val heard = loopback(probe, source, "$label-$sourceName")
+                ?: return@mapNotNull skipped(label, sourceName, optional)
+            val overSilence = heard.loopGainDb - max(silent.loopGainDb, SILENCE_FLOOR_DB)
             log(
                 String.format(
                     Locale.ROOT,
-                    "%s, %-19s: routed to %s | loop gain %6.1f dB (silence %6.1f dB) | peak %5.1f dB over " +
-                        "correlation noise | level %6.1f dBFS (silence %6.1f) | digital zeros while the sweep " +
-                        "plays %3.0f%% (silence %3.0f%%) | latency: presented-to-captured %.1f ms, " +
-                        "write-to-read %.1f ms",
-                    label, sourceName, heard.routedType, heard.loopGainDb, silent.loopGainDb, heard.peakDb,
+                    "%s, %-19s: heard %s | routed to %s | loop gain %6.1f dB (silence %6.1f dB, over it %5.1f) | " +
+                        "peak %5.1f dB over correlation noise, at %6.1f ms | level %6.1f dBFS (silence %6.1f) | " +
+                        "digital zeros while the sweep plays %3.0f%% (silence %3.0f%%) | latency: " +
+                        "presented-to-captured %.1f ms, write-to-read %.1f ms",
+                    label, sourceName, isHeard(heard, silent), heard.routedType, heard.loopGainDb, silent.loopGainDb,
+                    overSilence, heard.peakDb, heard.latency.peakAtMs,
                     heard.levelDbfs, silent.levelDbfs, 100 * heard.zerosDuringSweep, 100 * silent.zerosDuringSweep,
                     heard.latency.acousticMs, heard.latency.appRoundTripMs,
                 ),
@@ -216,19 +245,48 @@ class AcousticLoopbackDeviceTest {
                 .that(heard.routedType).isEqualTo(type)
             Triple(sourceName, heard, silent)
         }
-        val best = results.maxBy { it.second.loopGainDb - it.third.loopGainDb }
-        val (sourceName, heard, silent) = best
-        assertWithMessage("%s: loop gain over silence's, best source %s", label, sourceName)
-            .that(heard.loopGainDb - silent.loopGainDb).isAtLeast(OVER_SILENCE_DB)
-        assertWithMessage("%s: presented-to-captured latency (ms), %s", label, sourceName)
-            .that(heard.latency.acousticMs).isIn(Range.closed(0.0, MAX_LATENCY_MS))
+        val asserted = if (unprocessedSupported) {
+            checkNotNull(results.firstOrNull { it.first == "UNPROCESSED" }) { "$label: UNPROCESSED did not record" }
+        } else {
+            results.firstOrNull { isHeard(it.second, it.third) } ?: results.first()
+        }
+        val (sourceName, heard, silent) = asserted
+        assertWithMessage("%s, %s: matched-filter peak over correlation noise (dB)", label, sourceName)
+            .that(heard.peakDb).isAtLeast(MIN_PEAK_DB)
+        assertWithMessage("%s, %s: where the peak lies after the sweep was played (ms)", label, sourceName)
+            .that(heard.latency.peakAtMs).isIn(Range.closed(0.0, MAX_LATENCY_MS))
+        assertWithMessage("%s, %s: loop gain over silence's (floored at %s dB)", label, sourceName, SILENCE_FLOOR_DB)
+            .that(heard.loopGainDb - max(silent.loopGainDb, SILENCE_FLOOR_DB)).isAtLeast(OVER_SILENCE_DB)
+        // Both clocks are only there when the track reported a timestamp; peakAtMs bounds it otherwise.
+        if (!heard.latency.acousticMs.isNaN()) {
+            assertWithMessage("%s, %s: presented-to-captured latency (ms)", label, sourceName)
+                .that(heard.latency.acousticMs).isIn(Range.closed(0.0, MAX_LATENCY_MS))
+        }
     }
+
+    private fun skipped(label: String, sourceName: String, optional: Boolean): Nothing? {
+        check(optional) { "$label: the app's capture source $sourceName cannot record" }
+        log("$label, $sourceName: this phone cannot record from it, skipped")
+        return null
+    }
+
+    /** See the class comment. */
+    private fun isHeard(heard: Loopback, silent: Loopback): Boolean =
+        heard.peakDb >= MIN_PEAK_DB && heard.latency.peakAtMs in 0.0..MAX_LATENCY_MS &&
+            heard.loopGainDb - max(silent.loopGainDb, SILENCE_FLOOR_DB) >= OVER_SILENCE_DB
 
     private class Latency(
         /** From the sweep's first sample leaving the speaker to it being captured (both timestamps). */
         val acousticMs: Double,
         /** From the sweep's first sample being written to it being read back, by the clock. */
         val appRoundTripMs: Double,
+        /**
+         * Where the peak lies, ms after recorded sample [RECORD_LEAD] + [PREROLL]: the track
+         * starts only once [RECORD_LEAD] samples were read, so the sweep cannot be recorded before
+         * that sample, and for a heard sweep this is the output-to-input latency (plus the
+         * track's start-up).
+         */
+        val peakAtMs: Double,
     )
 
     private class Loopback(
@@ -257,21 +315,29 @@ class AcousticLoopbackDeviceTest {
         val readStart: Long,
     )
 
-    /** Plays [signal] on the voice-call path while recording from [source]; see [Loopback]. */
-    private fun loopback(signal: FloatArray, source: Int, name: String): Loopback {
-        val capture = capture(signal, source)
+    /**
+     * Plays [signal] on the voice-call path while recording from [source]; see [Loopback]. Null
+     * when this phone cannot record from [source].
+     */
+    private fun loopback(signal: FloatArray, source: Int, name: String): Loopback? {
+        val capture = capture(signal, source) ?: return null
         writeWav(name, capture.recorded)
         return analyze(capture)
     }
 
     @SuppressLint("MissingPermission") // granted in setUp
-    private fun capture(signal: FloatArray, source: Int): Capture {
+    private fun capture(signal: FloatArray, source: Int): Capture? {
         val minRecord = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-        val record = AudioRecord.Builder()
-            .setAudioSource(source)
-            .setAudioFormat(format(AudioFormat.CHANNEL_IN_MONO))
-            .setBufferSizeInBytes(max(minRecord, RATE / 5 * 2))
-            .build()
+        val record = try {
+            AudioRecord.Builder()
+                .setAudioSource(source)
+                .setAudioFormat(format(AudioFormat.CHANNEL_IN_MONO))
+                .setBufferSizeInBytes(max(minRecord, RATE / 5 * 2))
+                .build()
+        } catch (e: UnsupportedOperationException) {
+            Log.w(TAG, "source $source", e)
+            return null
+        }
         val minTrack = AudioTrack.getMinBufferSize(RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
         val track = AudioTrack.Builder()
             .setAudioAttributes(AudioOutput.playbackAttributes(AudioManager.STREAM_VOICE_CALL))
@@ -287,13 +353,15 @@ class AcousticLoopbackDeviceTest {
         var trackStampValid = false
         var writeStart = 0L
         val readStart = System.nanoTime()
+        val deadline = readStart + (recorded.size.toLong() * NANOS_PER_SECOND / RATE) + CAPTURE_SLACK_NANOS
         try {
             record.startRecording()
+            check(record.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "source $source did not start" }
             var got = 0
             val chunk = RATE / 100
             // Capture first (this phone delivers about a second of zeros after it starts), then the
             // probe, written from its own thread.
-            while (got < RECORD_LEAD) got += max(0, record.read(recorded, got, chunk))
+            while (got < RECORD_LEAD) got += read(record, recorded, got, chunk, deadline)
             val writer = Thread {
                 track.play()
                 writeStart = System.nanoTime()
@@ -301,7 +369,7 @@ class AcousticLoopbackDeviceTest {
             }
             writer.start()
             while (got < recorded.size) {
-                got += max(0, record.read(recorded, got, minOf(chunk, recorded.size - got)))
+                got += read(record, recorded, got, minOf(chunk, recorded.size - got), deadline)
                 if (routedType == null && got > RECORD_LEAD + RATE / 2) routedType = track.routedDevice?.type
                 if (!trackStampValid && got > RECORD_LEAD + RATE) trackStampValid = track.getTimestamp(trackStamp)
             }
@@ -315,6 +383,14 @@ class AcousticLoopbackDeviceTest {
         }
         val presentation = trackStamp.takeIf { trackStampValid }
         return Capture(recorded, routedType, presentation, recordStamp, writeStart, readStart)
+    }
+
+    /** One blocking read; fails on an error code or when the capture runs past [deadline]. */
+    private fun read(record: AudioRecord, into: ShortArray, at: Int, size: Int, deadline: Long): Int {
+        val n = record.read(into, at, size)
+        check(n >= 0) { "AudioRecord.read returned $n" }
+        check(System.nanoTime() < deadline) { "the capture stalled at sample $at of ${into.size}" }
+        return n
     }
 
     private fun analyze(capture: Capture): Loopback {
@@ -354,6 +430,7 @@ class AcousticLoopbackDeviceTest {
             latency = Latency(
                 acousticMs = presented?.let { (captured - it) / NANOS_PER_MS } ?: Double.NaN,
                 appRoundTripMs = (read - written) / NANOS_PER_MS,
+                peakAtMs = (peakLag - RECORD_LEAD - PREROLL) * MS_PER_SECOND / RATE,
             ),
         )
     }
@@ -365,6 +442,12 @@ class AcousticLoopbackDeviceTest {
     }
 
     private fun onMain(block: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(block)
+
+    /** Runs [command] as the shell user and returns its output once it has finished. */
+    private fun shell(command: String): String {
+        val out = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)
+        return ParcelFileDescriptor.AutoCloseInputStream(out).use { String(it.readBytes()) }
+    }
 
     private fun writeWav(name: String, pcm: ShortArray) {
         val dir = File(context.getExternalFilesDir(null), "loopback").apply { mkdirs() }
@@ -398,14 +481,28 @@ class AcousticLoopbackDeviceTest {
         const val TINY = 1e-12
         const val NANOS_PER_SECOND = 1_000_000_000L
         const val NANOS_PER_MS = 1e6
+        const val MS_PER_SECOND = 1000.0
+        const val CAPTURE_SLACK_NANOS = 5 * NANOS_PER_SECOND
         const val ROUTE_TIMEOUT_MS = 2_000
         const val POLL_MS = 20L
         const val SETTLE_MS = 500L
         const val WAV_HEADER = 44
         const val REFUSED = -1
 
-        /** A heard probe comes back this much above what the matched filter finds with silence played. */
+        /**
+         * The package's mode in `appops get` (`RECORD_AUDIO: allow; time=...`), not the uid's
+         * (`Uid mode: RECORD_AUDIO: foreground`).
+         */
+        val APP_OP_MODE = Regex("""(?m)^RECORD_AUDIO: (\w+)""")
+
+        /** A heard probe comes back this much above what the matched filter finds with silence played... */
         const val OVER_SILENCE_DB = 20.0
+
+        /** ...taking silence as no lower than this loop gain (digital zeros give -310 dB). */
+        const val SILENCE_FLOOR_DB = -100.0
+
+        /** A heard probe's matched-filter peak over the rest of the correlation. */
+        const val MIN_PEAK_DB = 35.0
         const val NO_NOISE_DB = 99.0
         const val MAX_LATENCY_MS = 500.0
 
