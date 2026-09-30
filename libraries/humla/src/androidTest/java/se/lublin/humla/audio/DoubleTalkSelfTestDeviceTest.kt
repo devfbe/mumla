@@ -61,7 +61,9 @@ import kotlin.math.sqrt
  *
  * Not yet measured: the phone left the bench before the first run. [MIN_HEARD] and [MAX_FALSE_OPEN]
  * are provisional, derived from the room test (18 dB: 91-97 % of voiced near-end frames heard,
- * 0 % false open on the app's configuration); set them from the first run's logged numbers.
+ * 0 % false open on the app's configuration); set them from the first run's logged numbers. So is
+ * [MIN_KEPT_DB], the level the denoiser keeps of the user while talking over the voice: with the
+ * double-talk relief it stands aside (0 dB) once the user is heard, without it up to -18 dB.
  */
 @LargeTest
 @RunWith(AndroidJUnit4::class)
@@ -131,9 +133,9 @@ class DoubleTalkSelfTestDeviceTest {
             String.format(
                 Locale.ROOT,
                 "SELFTEST voice alone: false open %s%%; talk-over: heard %s%%, lamp on %.0f%% of %d readings; " +
-                    "mode before %d, after %d",
+                    "kept %s dB; mode before %d, after %d",
                 listening.falseOpenPercent, talking.last().heardPercent, 100 * lampDuringTalk, talking.size,
-                modeBefore, audioManager.mode,
+                talking.last().keptDb, modeBefore, audioManager.mode,
             ),
         )
         assertWithMessage("audio mode restored").that(audioManager.mode).isEqualTo(modeBefore)
@@ -141,6 +143,8 @@ class DoubleTalkSelfTestDeviceTest {
             .isAtMost(MAX_FALSE_OPEN)
         assertWithMessage("near end heard while talking over the voice (%)").that(talking.last().heardPercent ?: 0)
             .isAtLeast(MIN_HEARD)
+        assertWithMessage("level the denoiser keeps of the near end over the voice (dB)")
+            .that(talking.last().keptDb ?: Float.NEGATIVE_INFINITY).isAtLeast(MIN_KEPT_DB)
     }
 
     private fun awaitPhase(readings: List<SelfTestReading>, phase: SelfTestPhase) {
@@ -199,6 +203,7 @@ class DoubleTalkSelfTestDeviceTest {
         /** Bounds around the SM-S938B's numbers; see the class comment. */
         const val MAX_FALSE_OPEN = 10
         const val MIN_HEARD = 70
+        const val MIN_KEPT_DB = -6f
 
         val APP_OP_MODE = Regex("""(?m)^RECORD_AUDIO: (\w+)""")
     }

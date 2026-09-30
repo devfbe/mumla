@@ -112,11 +112,12 @@ class DoubleTalkSelfTestTest {
             sink
         },
         source: TestCaptureSource = TestCaptureSource(mic, loopLastFrame = true),
+        rnnoiseApi: FakeRnnoiseApi = rnnoise,
     ) = DoubleTalkSelfTest(
         audioManager, devices, VadConfig.adaptive(holdTimeMs = 0, onsetFrames = 1), noise, -25, echo,
         AndroidAudioEffects(), limitDb, CLIP, { readings += it },
         TestCaptureSource.Factory(source), sinkFactory,
-        CapturePreprocessorFactory({ FakeSpeexPreprocessApi() }, { rnnoise }, { apm }),
+        CapturePreprocessorFactory({ FakeSpeexPreprocessApi() }, { rnnoiseApi }, { apm }),
         { _, _ -> error("no resampler expected at 48 kHz") },
         readingIntervalFrames = 1,
         listenFrames = listenFrames,
@@ -229,6 +230,32 @@ class DoubleTalkSelfTestTest {
         assertThat(readings.last { it.phase == SelfTestPhase.LISTEN }.falseOpenPercent).isEqualTo(0)
         // The reference gate never heard the user, so there is nothing to put a share on.
         assertThat(readings.last().heardPercent).isNull()
+    }
+
+    /**
+     * The level the user keeps through the denoiser while talking over the voice. RNNoise deleting
+     * everything costs exactly the 18 dB limit without the double-talk relief (no canceller, so no
+     * far end to go by), and nothing with it.
+     */
+    @Test
+    fun `the talking phase reports the level the denoiser keeps of the user`() {
+        val deleting = FakeRnnoiseApi(probability = 0.9f, onProcess = { it.fill(0) })
+        val relieved = selfTest(listOf(frameAt(-10f)), listenFrames = 160, rnnoiseApi = deleting)
+        relieved.start()
+        awaitUntil { readings.any { it.phase == SelfTestPhase.TALK && it.keptDb != null } }
+        relieved.stop()
+        assertThat(readings.last { it.phase == SelfTestPhase.LISTEN }.keptDb).isNull()
+        assertThat(readings.last().keptDb!!).isWithin(0.5f).of(0f)
+
+        readings.clear()
+        val limited = selfTest(
+            listOf(frameAt(-10f)), echo = EchoCancellationMode.NONE, listenFrames = 160,
+            rnnoiseApi = FakeRnnoiseApi(probability = 0.9f, onProcess = { it.fill(0) }),
+        )
+        limited.start()
+        awaitUntil { readings.any { it.phase == SelfTestPhase.TALK && it.keptDb != null } }
+        limited.stop()
+        assertThat(readings.last().keptDb!!).isWithin(0.5f).of(-18f)
     }
 
     @Test

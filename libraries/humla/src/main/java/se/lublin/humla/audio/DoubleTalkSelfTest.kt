@@ -88,6 +88,9 @@ public enum class SelfTestPhase { LISTEN, TALK }
  *   [DoubleTalkSelfTest]), the share the whole chain transmitted; null until enough frames count.
  * @param falseOpenPercent in [SelfTestPhase.LISTEN] (the user asked to stay quiet), the share of
  *   frames with the test voice playing on which the gate opened; null until enough frames count.
+ * @param keptDb in [SelfTestPhase.TALK], over the frames [heardPercent] counts, the chain's output
+ *   level against the reference gate's input (after echo cancellation, before the denoiser), dB:
+ *   how much of the user the denoiser keeps in double talk; null until enough frames count.
  */
 public data class SelfTestReading(
     val meter: MeterReading,
@@ -95,6 +98,7 @@ public data class SelfTestReading(
     val voicePlaying: Boolean,
     val heardPercent: Int?,
     val falseOpenPercent: Int?,
+    val keptDb: Float? = null,
 )
 
 /**
@@ -208,6 +212,8 @@ public class DoubleTalkSelfTest internal constructor(
     private var falseOpens = 0
     private var talked = 0
     private var heard = 0
+    private var talkedInPower = 0.0
+    private var talkedOutPower = 0.0
 
     /** What [start] changed and [stop] puts back. */
     private class Restore(val mode: Int, val device: CommunicationDevice?, val routed: Boolean)
@@ -328,15 +334,16 @@ public class DoubleTalkSelfTest internal constructor(
             val read = src.read(buffer, frameSize)
             if (read < 0) break
             if (read > 0) {
-                val transmit = pipe.process(buffer, read).transmit
-                count(transmit, referenceGate.open, voiceActive[playedFrame])
+                val out = pipe.process(buffer, read)
+                val playing = voiceActive[playedFrame]
+                count(out.transmit, referenceGate.open, playing, referenceGate.power, meanSquare(out.samples))
                 if (++count % readingIntervalFrames == 0) onReading(reading())
             }
         }
         src.stop()
     }
 
-    private fun count(transmit: Boolean, referenceOpen: Boolean, playing: Boolean) {
+    private fun count(transmit: Boolean, referenceOpen: Boolean, playing: Boolean, inPower: Double, outPower: Double) {
         if (restartRequested) {
             restartRequested = false
             phase = SelfTestPhase.LISTEN
@@ -345,6 +352,8 @@ public class DoubleTalkSelfTest internal constructor(
             falseOpens = 0
             talked = 0
             heard = 0
+            talkedInPower = 0.0
+            talkedOutPower = 0.0
         }
         phaseFrames++
         when (phase) {
@@ -358,6 +367,8 @@ public class DoubleTalkSelfTest internal constructor(
             SelfTestPhase.TALK -> if (playing && referenceOpen) {
                 talked++
                 if (transmit) heard++
+                talkedInPower += inPower
+                talkedOutPower += outPower
             }
         }
     }
@@ -368,6 +379,11 @@ public class DoubleTalkSelfTest internal constructor(
         voicePlaying = voiceActive[playedFrame],
         heardPercent = percent(heard, talked),
         falseOpenPercent = percent(falseOpens, listened),
+        keptDb = if (talked < MIN_COUNTED_FRAMES || talkedInPower <= 0.0) {
+            null
+        } else {
+            (POWER_DB_PER_DECADE * log10(talkedOutPower.coerceAtLeast(TINY) / talkedInPower)).toFloat()
+        },
     )
 
     private fun percent(part: Int, whole: Int): Int? =
@@ -375,7 +391,9 @@ public class DoubleTalkSelfTest internal constructor(
 
     /**
      * The reference gate: an adaptive voice gate on the frame after echo cancellation and before the
-     * denoiser, which leaves the frame alone and has no opinion on the chain's probability.
+     * denoiser, which leaves the frame alone and has no opinion on the chain's probability. Keeps
+     * the frame's mean square for [SelfTestReading.keptDb] (two frames ahead of the denoiser's output,
+     * which evens out over the counted frames).
      */
     private class ReferenceGate(config: VadConfig) : CapturePreprocessor {
         private val gate = VoiceActivityDetector(config)
@@ -384,8 +402,12 @@ public class DoubleTalkSelfTest internal constructor(
         var open: Boolean = false
             private set
 
+        var power: Double = 0.0
+            private set
+
         override fun process(frame: ShortArray): Float? {
             open = gate.isVoice(frame, frame.size, null)
+            power = meanSquare(frame)
             return null
         }
 
@@ -393,6 +415,14 @@ public class DoubleTalkSelfTest internal constructor(
     }
 
     internal companion object {
+        /** Mean square of [frame], in 16-bit units. */
+        fun meanSquare(frame: ShortArray): Double {
+            if (frame.isEmpty()) return 0.0
+            var sum = 0.0
+            for (s in frame) sum += s.toDouble() * s
+            return sum / frame.size
+        }
+
         /**
          * Frame by frame, whether the test voice is in the room while that frame of [voice] plays:
          * voiced itself, or within [ECHO_TAIL_FRAMES] after a voiced frame (the echo and the room's
