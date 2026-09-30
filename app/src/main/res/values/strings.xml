@@ -447,7 +447,7 @@
     <string name="battery_optimization_prompt_message">Battery optimization can close Mumla while the screen is off, which drops you from the server. Allow Mumla to run in the background to stay connected. You can change this later under Settings › General › Background connection.</string>
     <string name="battery_optimization_prompt_decline">Not now</string>
     <string name="rnnoise_strength">Maximum noise reduction</string>
-    <string name="rnnoise_strength_sum">Lower: heard over others on speaker. Higher: less noise</string>
+    <string name="rnnoise_strength_sum">Higher: less noise. Eases while you talk over others</string>
     <string name="rnnoise_strength_value">%1$d dB</string>
     <string name="rnnoise_strength_unlimited">Unlimited</string>
     <string name="rnnoise_strength_reset">Reset to default</string>

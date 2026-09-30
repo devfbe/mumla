@@ -9,8 +9,8 @@ The chain under test, for `EchoCancellationMode.WEBRTC` and Strong noise suppres
 
 ```
 microphone ─▶ WebRTC APM (AEC3 + AGC2 + high-pass) ─▶ RNNoise (attenuation limit) ─▶ voice gate ─▶ Opus
-                  ▲
-remote users ─▶ mix ─▶ FarEndFrameChunker ─▶ AEC3 far-end reference, then AudioTrack
+                  ▲                                    ▲ eased in double talk (DoubleTalkRelief)
+remote users ─▶ mix ─▶ FarEndFrameChunker ─▶ AEC3 far-end reference ─▶ FarEndActivity, then AudioTrack
 ```
 
 ## 1. Overview
@@ -30,9 +30,17 @@ manual ones skip themselves unless a system property enables them (see section 5
 
 - `RnnoisePreprocessorTest`: the limit's mix `wet + a·(dry − wet)`, `a = 10^(−limit/20)`, lines up
   with RNNoise's two-frame latency to the sample; unlimited is RNNoise's own output bit for bit; a
-  limit changed mid-stream applies from the next frame, aligned; 18 dB is the default.
+  limit changed mid-stream applies from the next frame, aligned; 18 dB is the default. With the
+  double-talk relief: talking over the far end, a denoiser that deletes everything passes the input
+  unchanged after a ramp without a step; without the far end the output is bit for bit the limit's.
+- `DoubleTalkReliefTest`, `FarEndActivityTest`: when the relief engages (far end within 800 ms,
+  three voiced frames at -60 dBFS or more in front of RNNoise), that a two-frame echo burst never
+  does, the fade in and out, "Unlimited" coming back exactly; the far end's level threshold and hold.
+- `NearEndRetentionTest`: the retention metric of section 7 (level, blocks, dropouts, echo ignored).
 - `CapturePreprocessorFactoryTest`, `CaptureWiringTest`: AEC3 before the denoiser, AGC2 in front of
-  RNNoise, the requested limit (default 18 dB) reaching the stage.
+  RNNoise, the requested limit (default 18 dB) reaching the stage, the relief only with both AEC3
+  and RNNoise and fed by the canceller's far end. `CaptureThreadAllocationTest` covers the relief
+  on both threads.
 - `SettingsAudioTest`, `SessionSettingsSyncTest`, `AudioSettingsFragmentTest`,
   `AudioSettingsPolicyTest`: the strength setting (default 18, "Unlimited" at the slider's end,
   clamping, reset to 18), a running session reconfigured without a reconnect, the slider and its reset
@@ -108,6 +116,8 @@ far end only, 4 s double talk, 4 s near end only; far end at −18 dBFS, near en
 speaker high-pass, light saturation, a 300 ms room tail) at −20/−10/0/+6 dB. Three runs per chain:
 A = echo + near + noise, B = echo + noise, C = near + noise with a silent reference. The gate is the
 app's adaptive voice gate (onset 2 frames, hold 250 ms). Tables go to logcat, tag `DoubleTalk`.
+The replay runs faster than real time, so chains built for it take `DoubleTalkRig.clock`, which
+advances 10 ms per frame (the double-talk relief times its far-end hold by it).
 
 **Metrics.**
 
@@ -119,6 +129,9 @@ app's adaptive voice gate (onset 2 frames, hold 250 ms). Tables go to logcat, ta
 - *Zeroed %*: share of voiced near-end double-talk frames that run A outputs as digital silence
   (mean power below 1 LSB²), i.e. RNNoise deleting the user.
 - *Kept dB*: near-end power kept in double talk, `10·log10((P_A − P_B) / P_C)`.
+- *Retained dB* (and median), *dropped %*, *dropouts/s*: `NearEndRetention` (section 7) on runs A
+  and C over the voiced double-talk frames. Unlike *kept dB* it ignores the echo, and unlike the
+  gate it sees a user who comes through 15 dB down.
 - *Near alone %*: run C's gate on voiced near-end frames.
 
 **DoubleTalkAec3DeviceTest.shippedChainInDoubleTalk** (synthetic talkers; bounds in the test's
@@ -133,6 +146,9 @@ Unlimited RNNoise at LINEAR −20 / 0 dB: gate 62 / 26 %, zeroed 45 / 64 %; AEC3
 Bounds: false-open ≤ 45 %, gate ≥ 55 % per scenario, 18 dB at least 25 points above unlimited and
 zeroing ≤ 2 %. Note the trade: on the loud nonlinear synthetic path echo alone opens the limited gate
 more often (37 % against 30 % unlimited). Real speech and the real room do not show this (below).
+Since the double-talk relief the shipped chain is no longer the plain 18 dB chain; these numbers and
+bounds predate it and need a phone run. A provisional bound adds: the shipped chain retains at
+least 3 dB more than unlimited RNNoise at LINEAR −20 / 0 dB.
 
 **RealSpeechDeviceTest** repeats this with the four Piper pairs. `shippedChainWithRealSpeech`
 compares the shipped chain, RNNoise without a limit, and APM alone; `attenuationLimitSweepWithReal
@@ -142,7 +158,9 @@ gate 66-81 %, zeroed 34-39 %, near alone 98-99 %; a 12-30 dB limit lifts the mea
 30 dB +7.2). The shipped chain is exactly the sweep's 18 dB chain (AGC2 in front), so those numbers
 stand for it: mean gate 85-86 %, near alone 98-99 %; `shippedChainWithRealSpeech` now also runs
 "no limit" for comparison and bounds the shipped chain at ≥ 72 % gate and ≤ 5 % zeroed per pair.
-(A per-pair rerun of `shippedChainWithRealSpeech` with the 18 dB default is still to be logged.)
+(A per-pair rerun of `shippedChainWithRealSpeech` with the 18 dB default is still to be logged.) It
+now logs the retention columns and, provisionally, wants the shipped chain to retain at least 3 dB
+more than "no limit" per Piper pair.
 
 **RnnoiseAttenuationLimitDeviceTest** (synthetic, three pairs): the limit and AGC2's position. AGC2
 behind RNNoise lifts residual babble from about −48 to −26 dBFS, so AGC2 stays in front.
@@ -213,6 +231,12 @@ under `room/`: one WAV per configuration (the raw recording), `far-reference.wav
 | `near_alone_gate`, `dt_gate` | the gate on voiced near-end frames, alone and in double talk |
 | `echo_fo`, `echo_fo_converging` | the gate opening on echo alone, converged and in AEC3's first 2 s |
 | `residual_dbfs`, `residual_p95_dbfs` | output level on echo alone |
+| `dt_retention_db`, `dt_retention_median_db`, `dt_dropped`, `dt_dropouts_per_s` | the second near-end copy (double talk) against the first (alone) through the same chain, section 7 |
+
+Since the double-talk relief the `chain` column has `shipped` (18 dB and the relief), `limit18`
+(18 dB without it, the chain shipped before), `nolimit` and `apm`. The test now also asserts,
+provisionally, that on VOICE_COMMUNICATION/COMM/default the shipped chain retains at least −8 dB,
+no less than `limit18`, with at most one point more echo-only false open.
 
 **Results, SM-S938B, 2026-09-30** (commit 5bf84dbc; near end at the PC's 95 %, full run; in that
 run "no limit" was named `shipped` and "18 dB" `rnn18`). DT = double-talk gate, FO = echo-only
@@ -299,16 +323,128 @@ The engine allocates nothing per frame (one reading object every fifth frame). T
 sheet stops the test when it pauses.
 
 **Tests.** `DoubleTalkSelfTestTest` (route and restore, reference before write, lamp from the gate,
-the two counts, live limit, failure clean-up); `DoubleTalkTestViewModelTest` (start/stop/retry, a
+the two counts, the level kept, live limit, failure clean-up); `DoubleTalkTestViewModelTest` (start/stop/retry, a
 stop racing a start, lamp, late readings dropped, strength live and stored on release, reset,
 cleared model stops the engine). On the phone, `DoubleTalkSelfTestDeviceTest` runs the engine with
 the PC as the user: `python3 tools/room-test/room_test.py --serial <serial> --selftest`, then start
 the test from Studio (it is skipped unless `debug.mumla.selftest=true`). It uses the far-end Piper
 clip as the test voice at −18 dBFS and the near-end clip from the PC, with the shipped settings; it
-logs `SELFTEST voice alone: false open …%; talk-over: heard …%` (tag `SelfTest`) and asserts false
-open ≤ 10 % and heard ≥ 70 %. Those bounds are provisional until its first run on the SM-S938B.
+logs `SELFTEST voice alone: false open …%; talk-over: heard …%, …; kept … dB` (tag `SelfTest`) and
+asserts false open ≤ 10 %, heard ≥ 70 % and kept ≥ −6 dB. Those bounds are provisional until its
+first run on the SM-S938B.
 
-## 7. Troubleshooting
+*Kept* (`SelfTestReading.keptDb`, not shown on the screen yet): over the frames "heard you" counts,
+the chain's output level against the reference gate's input, i.e. how much of the user the
+denoiser lets through while the voice plays. With the double-talk relief it should be near 0 dB;
+without it RNNoise may take up to its limit.
+
+## 7. Double-talk level: how loud the user stays
+
+**The complaint.** With 18 dB the user can break in, but the remote side says it barely hears them
+while it talks itself. The gate shares above cannot see that: a user 15 dB down still opens the gate.
+
+**Metric** (`NearEndRetention`, test fixtures; used by `DoubleTalkRig`, the room replay and, as
+*kept*, the self-test). The same words through the same chain, once in double talk and once alone,
+compared 100 ms at a time: the near-end part of a double-talk block is its projection onto the alone
+block, `g = <dt, alone> / <alone, alone>` (the echo is not correlated with the user's words, so it
+drops out). *Retention* is the power kept, `Σ g²·P_alone / Σ P_alone`, in dB, plus the median block;
+a frame more than 20 dB below the same frame alone is *dropped*, and runs of dropped frames per second
+are *dropouts/s*. In the room recordings the two near-end copies are the same file 26 s apart
+(sample-aligned: the clocks agree within one sample), so the second copy (over the far end) is
+compared with the first (alone).
+
+**How it was measured** (2026-09-30, offline, the phone untouched). The room recordings of section 5
+(full level, `--gain-db −12`, `−20`) were replayed on the PC through the app's own Kotlin classes
+(`CapturePreprocessorFactory`, `RnnoisePreprocessor`, `VoiceActivityDetector`) and an x86-64 build of
+the same native sources (`cpp/tests/CMakeLists.txt`), the far-end reference fed as the device test
+feeds it (its per-frame order was not recorded; a constant 120 ms lead, which puts AEC3's delay at
+the ~290 ms the phone measured). The replay reproduces the phone's own numbers within 1-2 points
+(VOICE_COMMUNICATION DT gate at 18 dB: 98.2 / 92.7 / 80.5 % against 97.1 / 91.1 / 79.7 %).
+
+**Per stage, VOICE_COMMUNICATION + MODE_IN_COMMUNICATION** (the app's configuration). Retention is
+against the same words alone through the same stage, so each stage's own loss is the difference to
+the stage before; "zeros" is the share of exact-zero samples in double talk; "dropped" the share of
+voiced double-talk frames more than 20 dB down; "echo resid" the output on echo alone (dBFS).
+
+| Stage | retention loud / −12 / −20 dB (median block) | zeros DT | dropped | echo resid |
+|---|---|---|---|---|
+| raw capture | −0.4 / −1.3 / −1.8 (−0 / −2 / −9) | 17 / 30 / 50 % | 3 / 19 / 32 % | −120 / −59 / −104 |
+| AEC3 + high-pass | −1.1 / −1.9 / −2.4 (−1 / −4 / −11) | 13 / 25 / 42 % | 9 / 27 / 41 % | −96 / −85 / −96 |
+| AGC2 (= RNNoise's input) | −4.2 / −4.6 / −0.9 (−2 / −5 / −12) | 13 / 20 / 16 % | 10 / 28 / 40 % | −96 / −82 / −82 |
+| RNNoise, no limit | −5.2 / −14.5 / −35.5 | 23 / 69 / 87 % | 25 / 83 / 17 % | −102 / −97 / −102 |
+| RNNoise, 30 dB | −5.2 / −14.2 / −12.2 | 20 / 40 / 58 % | 25 / 77 / 34 % | −102 / −96 / −102 |
+| RNNoise, 18 dB (shipped before) | −5.1 / −12.9 / −3.6 (−6 / −20 / −12) | 19 / 37 / 47 % | 18 / 47 / 38 % | −102 / −94 / −95 |
+| RNNoise, 12 dB | −5.1 / −10.9 / −1.7 | 19 / 34 / 30 % | 13 / 35 / 38 % | −102 / −91 / −91 |
+| RNNoise, 6 dB | −4.8 / −7.7 / −1.1 | 13 / 20 / 16 % | 11 / 31 / 39 % | −96 / −86 / −86 |
+| RNNoise bypassed | −4.2 / −4.6 / −0.9 | 13 / 20 / 16 % | 10 / 28 / 40 % | −96 / −82 / −82 |
+
+Who loses what, 18 dB: the mid talker (−12 dB) loses 13 dB, of which RNNoise 8, AGC2 3 (the echo in
+the double-talk capture pulls its gain down; at full level too), the platform 1-2 and AEC3 under 1.
+The loud talker loses 5 dB, mostly AGC2. The quiet talker's loss is the platform's half duplex: half
+the double-talk samples are exact zeros and the median 100 ms block is 9 dB down at the microphone.
+(At −20 dB RNNoise also takes 15 dB off the user alone, −37 against −22 dBFS bypassed, which is why
+its double-talk retention looks small.) The ungated sources are worse, not better: UNPROCESSED and
+VOICE_RECOGNITION lose 4-11 dB in AEC3 alone and 5-11 dB in total at 18 dB, so switching the source
+does not help and was not pursued.
+
+**Candidates**, on the same recordings (prototyped on the dumped RNNoise input, output and dry path,
+then the shipped one checked on the real classes; the table's numbers are from the prototype, which
+the real classes match within 0.3 dB). Retention against the user alone through today's chain;
+"gaps" is the output between words in double talk against today's, dB ± spread (pumping); noise:
+pink or real-speech babble at −45 dBFS without a far end, "babble+far" the same babble while the far
+end plays but its echo is gated (the worst case for a relief).
+
+| Candidate | VC retention loud / −12 / −20 | VC dropped | VC echo FO, resid | gaps | UNPROC loud FO, resid | VR loud FO, resid | pink, babble (FO, resid) | babble+far resid |
+|---|---|---|---|---|---|---|---|---|
+| 18 dB (before) | −5.1 / −12.9 / −3.6 | 18 / 47 / 38 % | 0 / 0 / 0 %, −102 / −94 / −95 | 0 | 8.9 %, −67 | 0.0 %, −74 | 43 %, −65; 97 %, −41 | −46 |
+| fixed 12 dB | −5.1 / −10.9 / −1.7 | 13 / 35 / 38 % | 0 / 0 / 0 %, −102 / −91 / −91 | +1.5 ± 2.4 | 8.9 %, −61 | 0.0 %, −68 | 0 %, −59; 96 %, −40 | −44 |
+| fixed 6 dB | −4.8 / −7.7 / −1.1 | 11 / 31 / 39 % | 0 / 2.4 / 0 %, −96 / −86 / −86 | +4.6 ± 4.4 | 8.9 %, −55 | 6.7 %, −62 | 0 %, −53; 100 %, −37 | −41 |
+| make-up gain toward the input level, far end and user evidence, ≤ 18 dB | −2.0 / −0.4 / +14.2 | 10 / 26 / 31 % | unchanged | +12.7 ± 7.1 | 8.9 %, −52 | 2.5 %, −66 | unchanged | −35 |
+| **relief to 0 dB, far end and user evidence (shipped)** | **−4.2 / −1.8 / +14.2** | **10 / 27 / 32 %** | **unchanged** | +9.2 ± 7.1 | 8.9 %, −52 | 2.5 %, −66 | unchanged | −37 |
+| relief to 6 dB, same evidence | −4.8 / −6.8 / +8.3 | 11 / 30 / 33 % | unchanged | +4.6 ± 4.7 | 8.9 %, −57 | 2.5 %, −70 | unchanged | −41 |
+| near-end-aware only (relief to 0 dB on user evidence, far end ignored) | −4.2 / −4.7 / −1.0 ¹ | 10 / 29 / 42 % | unchanged | +9.2 ± 7.1 | 8.9 %, −52 | 2.5 %, −66 | 43 %, −65; 100 %, −33 | −37 |
+| far-end-aware only (6 dB whenever the far end talks) | −4.8 / −6.7 / +8.4 | 11 / 29 / 28 % | 0 / 2.4 / 0 %, −96 / −86 / −86 | +4.6 ± 4.4 | 11.1 %, −55 | 13.4 %, −62 | unchanged | −41 |
+
+¹ against its own (also relieved) near end alone. "Unchanged" means bit for bit the 18 dB chain's.
+"Gaps" is for the −12 dB talker. The pink noise's 43 % is the adaptive gate on this stationary
+noise with 18 dB (the device rig's own pink measured ≤ 2 %); every far-gated candidate leaves it as
+it is.
+
+- The make-up gain and the relief are the same thing where RNNoise deleted the frame (gain `G` on the
+  limit-`L` output is exactly the limit `L − G`); elsewhere the gain also amplifies what RNNoise kept,
+  overshoots the input level (UNPROCESSED +0.5, VOICE_RECOGNITION +3.5 dB) and lifts the gaps and
+  babble more (+12.7 dB, −35 dBFS), and it needs clip protection. The relief moves the existing dry
+  mix, never above the input, already aligned: it is the cleaner formulation.
+- The evidence decides the echo cost. A level gate with the usual 250 ms hold on RNNoise's input
+  also opened on a single 20 ms echo burst the platform leaked (−12 dB run: echo-only false open 0
+  → 2.4 %, VOICE_RECOGNITION 0 → 16 %); three voiced frames in a row at −60 dBFS or more (the frame
+  RNNoise outputs next and the two it holds, so no onset is lost) removed that on the app's
+  configuration.
+- Gating on the far end keeps single talk and noise alone exactly as before. Without it, babble
+  alone comes through 9 dB louder (−33 against −41 dBFS).
+
+**Shipped**: `DoubleTalkRelief` (in `RnnoisePreprocessor`, built by `CapturePreprocessorFactory`
+when both AEC3 and RNNoise run): while `FarEndActivity` has seen a far-end frame at −50 dBFS or more
+within 800 ms (fed on the playback thread from the canceller's reverse stream, one volatile
+timestamp) and the user evidence above holds, RNNoise's limit moves to 0 dB, in within about 20 ms,
+out with a 60 ms time constant, the dry share ramped across each frame. The user's slider stays the
+limit whenever the far end is silent or the user is not talking. The strength's summary says so.
+
+**Costs, known and accepted.** Babble in the user's room while the far end talks comes through up to
+9 dB louder (−37 against −46 dBFS; a 6 dB relief would halve that but keep only −6.8 dB of the mid
+talker). On a source without the platform's half duplex (UNPROCESSED, VOICE_RECOGNITION, and any phone
+whose VOICE_COMMUNICATION does not gate) the echo-only residual rises by 8-15 dB and false open by up
+to 2.5 points: unmeasured on such a phone. At −20 dB the user in double talk now comes out louder
+than alone (+14 dB), because RNNoise takes 15 dB off that quiet, platform-chopped voice when it is
+alone; that single-talk loss is a separate matter.
+
+**Still needs the phone** (provisional bounds in the tests): `RoomAcousticsDeviceTest` with
+`--only VOICE_COMMUNICATION/COMM` at full, −12 and −20 dB (retention, the relief against
+`limit18`); `DoubleTalkSelfTestDeviceTest` (heard, false open, kept); `RealSpeechDeviceTest` and
+`DoubleTalkAec3DeviceTest.shippedChainInDoubleTalk`, whose echo bounds predate the relief (on the
+synthetic nonlinear path the relief may open on echo residual); and a real call.
+
+## 8. Troubleshooting
 
 - **Studio's device run shows only "Connected to process".** The results are not shown in the run
   window over the MCP. Read the runner in logcat: `adb logcat -s 'TestRunner:*' DoubleTalk:I RoomTest:I
