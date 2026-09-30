@@ -58,6 +58,52 @@ class VoiceTransmitterTest {
         override fun close() = Unit
     }
 
+    /**
+     * The contract of the Opus encoder with [framesPerPacket] frames per packet: a packet is ready
+     * once full, [terminate] pads a partly filled packet with silence and flags it, and an empty
+     * buffer at [terminate] yields no packet. Each frame is encoded as its first sample, two bytes.
+     */
+    private class BufferingEncoder(private val framesPerPacket: Int) : IEncoder {
+        private val samples = ShortArray(framesPerPacket)
+        private var ready = false
+        private var terminated = false
+        override var bufferedFrames = 0
+            private set
+        override val isReady: Boolean get() = ready
+        override val encodedLength: Int get() = if (ready) 2 * framesPerPacket else 0
+        override val isTerminator: Boolean get() = terminated
+
+        override fun encode(input: ShortArray, inputSize: Int): Int {
+            check(!ready) { "a ready packet was not taken" }
+            terminated = false
+            samples[bufferedFrames++] = input[0]
+            ready = bufferedFrames == framesPerPacket
+            return encodedLength
+        }
+
+        override fun getEncodedData(packetBuffer: PacketBuffer) {
+            check(ready)
+            for (sample in samples) {
+                packetBuffer.append(sample.toLong() shr 8)
+                packetBuffer.append(sample.toLong())
+            }
+            bufferedFrames = 0
+            ready = false
+            terminated = false
+        }
+
+        override fun terminate() {
+            terminated = true
+            if (bufferedFrames > 0 && !ready) {
+                samples.fill(0, bufferedFrames)
+                bufferedFrames = framesPerPacket
+                ready = true
+            }
+        }
+
+        override fun close() = Unit
+    }
+
     /** Copies what it is handed, as the network layer must, since the buffer is reused. */
     private class RecordingListener : AudioHandler.AudioEncodeListener {
         val packets = mutableListOf<ByteArray>()
@@ -78,6 +124,123 @@ class VoiceTransmitterTest {
         }
 
     private fun frame(first: Int) = ShortArray(FRAME) { if (it == 0) first.toShort() else 0 }
+
+    /** A transmitter whose encoder puts two frames into a packet, as the default Opus setup does. */
+    private fun bufferingTransmitter(
+        listener: AudioHandler.AudioEncodeListener,
+        mode: IInputMode,
+        protocol: UdpProtocol,
+    ) =
+        VoiceTransmitter(CapturePipeline(null, NoopPreprocessor, mode), listener).apply {
+            udpProtocol = protocol
+            setCodec(HumlaUDPMessageType.UDPVoiceOpus) { BufferingEncoder(framesPerPacket = 2) }
+        }
+
+    private fun bytes(vararg values: Int) = values.map { it.toByte() }
+
+    /**
+     * Releasing a whisper hold turns talking off and then resets the target; the reset can reach
+     * the transmitter before the capture thread notices the release. The buffered last frame and
+     * the terminator still belong to the whisper, not to the channel.
+     */
+    @Test
+    fun `the terminator of a released whisper keeps the whisper target`() {
+        // LEGACY: type and target; frame number; size 4, with 0x2000 as the terminator flag.
+        // PROTOBUF: header 0; target (1); frame_number (4); opus_data (5); is_terminator (16).
+        val expected = mapOf(
+            UdpProtocol.LEGACY to listOf(
+                bytes(OPUS or 5, 0, 4, 1, 1, 2, 2),
+                bytes(OPUS or 5, 2, 0xA0, 0x04, 3, 3, 0, 0),
+            ),
+            UdpProtocol.PROTOBUF to listOf(
+                bytes(0, 0x08, 5, 0x2A, 4, 1, 1, 2, 2),
+                bytes(0, 0x08, 5, 0x20, 2, 0x2A, 4, 3, 3, 0, 0, 0x80, 0x01, 0x01),
+            ),
+        )
+        for ((protocol, packets) in expected) {
+            val listener = RecordingListener()
+            val ptt = ToggleInputMode()
+            val transmitter = bufferingTransmitter(listener, ptt, protocol)
+            transmitter.targetId = 5
+            ptt.setTalkingOn(true)
+            for (first in listOf(0x0101, 0x0202, 0x0303)) transmitter.onAudioInputReceived(frame(first), FRAME)
+
+            ptt.setTalkingOn(false)
+            transmitter.targetId = 0
+            transmitter.onAudioInputReceived(frame(0x0404), FRAME)
+
+            assertWithMessage("$protocol").that(listener.packets.map { it.toList() })
+                .containsExactlyElementsIn(packets).inOrder()
+            assertThat(listener.talking).containsExactly(true, false).inOrder()
+        }
+    }
+
+    /**
+     * A new target while talking ends the stream to the old one with a terminator on the old target,
+     * and the frames after the change start a new stream to the new target.
+     */
+    @Test
+    fun `switching the target while talking terminates the old stream on the old target`() {
+        val expected = mapOf(
+            UdpProtocol.LEGACY to listOf(
+                bytes(OPUS or 5, 0, 4, 1, 1, 2, 2),
+                bytes(OPUS or 5, 2, 0xA0, 0x04, 3, 3, 0, 0),
+                bytes(OPUS, 4, 4, 4, 4, 5, 5),
+            ),
+            UdpProtocol.PROTOBUF to listOf(
+                bytes(0, 0x08, 5, 0x2A, 4, 1, 1, 2, 2),
+                bytes(0, 0x08, 5, 0x20, 2, 0x2A, 4, 3, 3, 0, 0, 0x80, 0x01, 0x01),
+                bytes(0, 0x08, 0, 0x20, 4, 0x2A, 4, 4, 4, 5, 5),
+            ),
+        )
+        for ((protocol, packets) in expected) {
+            val listener = RecordingListener()
+            val transmitter = bufferingTransmitter(listener, ContinuousInputMode(), protocol)
+            transmitter.targetId = 5
+            for (first in listOf(0x0101, 0x0202, 0x0303)) transmitter.onAudioInputReceived(frame(first), FRAME)
+
+            transmitter.targetId = 0
+            for (first in listOf(0x0404, 0x0505)) transmitter.onAudioInputReceived(frame(first), FRAME)
+
+            assertWithMessage("$protocol").that(listener.packets.map { it.toList() })
+                .containsExactlyElementsIn(packets).inOrder()
+            assertThat(listener.talking).containsExactly(true)
+        }
+    }
+
+    /**
+     * A release right after a full packet leaves nothing buffered; the transmission still ends with
+     * a terminator, a packet of silence numbered after the last one, and the audio of the frame that
+     * noticed the release is not sent.
+     */
+    @Test
+    fun `a release on a packet boundary still sends a terminator on the stream's target`() {
+        val expected = mapOf(
+            UdpProtocol.LEGACY to listOf(
+                bytes(OPUS or 5, 0, 4, 1, 1, 2, 2),
+                bytes(OPUS or 5, 2, 0xA0, 0x04, 0, 0, 0, 0),
+            ),
+            UdpProtocol.PROTOBUF to listOf(
+                bytes(0, 0x08, 5, 0x2A, 4, 1, 1, 2, 2),
+                bytes(0, 0x08, 5, 0x20, 2, 0x2A, 4, 0, 0, 0, 0, 0x80, 0x01, 0x01),
+            ),
+        )
+        for ((protocol, packets) in expected) {
+            val listener = RecordingListener()
+            val ptt = ToggleInputMode()
+            val transmitter = bufferingTransmitter(listener, ptt, protocol)
+            transmitter.targetId = 5
+            ptt.setTalkingOn(true)
+            for (first in listOf(0x0101, 0x0202)) transmitter.onAudioInputReceived(frame(first), FRAME)
+
+            ptt.setTalkingOn(false)
+            transmitter.targetId = 0
+            transmitter.onAudioInputReceived(frame(0x0909), FRAME)
+
+            assertWithMessage("$protocol").that(listener.packets.map { it.toList() })
+                .containsExactlyElementsIn(packets).inOrder()
+        }
+    }
 
     @Test
     fun `a packet carries codec and target, the sequence number and the encoded frame`() {
@@ -178,5 +341,6 @@ class VoiceTransmitterTest {
     private companion object {
         const val FRAME = 480
         const val HOT_CALLS = 100_000
+        val OPUS = HumlaUDPMessageType.UDPVoiceOpus.ordinal shl 5
     }
 }
