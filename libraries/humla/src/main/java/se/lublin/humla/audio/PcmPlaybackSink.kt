@@ -22,7 +22,7 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import se.lublin.humla.exception.AudioInitializationException
 
-/** Blocking 16-bit mono PCM playback for the [CapturePreview]'s loopback. */
+/** Blocking 16-bit mono PCM playback for the [CapturePreview]'s loopback and [DoubleTalkSelfTest]'s voice. */
 public interface PcmPlaybackSink {
     public fun play()
 
@@ -77,6 +77,28 @@ public class AndroidAudioTrackSink internal constructor(private val track: Audio
                 .setBufferSizeInBytes(minBufferSize)
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .build()
+            if (track.state != AudioTrack.STATE_INITIALIZED) {
+                track.release()
+                throw AudioInitializationException("AudioTrack did not initialise at $sampleRate Hz")
+            }
+            return AndroidAudioTrackSink(track)
+        }
+    }
+
+    /**
+     * A track built exactly like a call's playback in `AudioOutput`: the same attributes, buffer
+     * size and low-latency mode, at 48 kHz whatever `sampleRate` asks for.
+     */
+    public class CallFactory : PcmPlaybackSinkFactory {
+        override fun open(audioStream: Int, sampleRate: Int): PcmPlaybackSink {
+            require(sampleRate == AudioHandler.SAMPLE_RATE) { "calls play at ${AudioHandler.SAMPLE_RATE} Hz" }
+            val minBufferSize = AudioTrack.getMinBufferSize(
+                sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,
+            )
+            if (minBufferSize <= 0) {
+                throw AudioInitializationException("no AudioTrack at $sampleRate Hz")
+            }
+            val track = AudioOutput.buildTrack(audioStream, AudioOutput.playbackBuffer(minBufferSize).trackBytes)
             if (track.state != AudioTrack.STATE_INITIALIZED) {
                 track.release()
                 throw AudioInitializationException("AudioTrack did not initialise at $sampleRate Hz")

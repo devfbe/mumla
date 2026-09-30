@@ -121,26 +121,6 @@ internal class AudioOutput(
         return t
     }
 
-    private fun buildTrack(audioStream: Int, bytes: Int): AudioTrack = try {
-        AudioTrack.Builder()
-            .setAudioAttributes(playbackAttributes(audioStream))
-            .setAudioFormat(
-                AudioFormat.Builder()
-                    .setSampleRate(AudioHandler.SAMPLE_RATE)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .build(),
-            )
-            .setBufferSizeInBytes(bytes)
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
-            .build()
-    } catch (e: IllegalArgumentException) {
-        throw AudioInitializationException(e)
-    } catch (e: UnsupportedOperationException) {
-        throw AudioInitializationException(e)
-    }
-
     fun stopPlaying() {
         if (!running) return
 
@@ -307,6 +287,30 @@ internal class AudioOutput(
 
         /** The fewest mixes the track holds, so a late wakeup of the playback thread does not underrun it. */
         private const val MIN_TRACK_MIXES = 4
+
+        /**
+         * The playback track of a call on [audioStream], [bytes] large; also the double-talk
+         * self-test's, so its test voice plays exactly like a remote user.
+         */
+        fun buildTrack(audioStream: Int, bytes: Int): AudioTrack = try {
+            AudioTrack.Builder()
+                .setAudioAttributes(playbackAttributes(audioStream))
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(AudioHandler.SAMPLE_RATE)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .build(),
+                )
+                .setBufferSizeInBytes(bytes)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+                .build()
+        } catch (e: IllegalArgumentException) {
+            throw AudioInitializationException(e)
+        } catch (e: UnsupportedOperationException) {
+            throw AudioInitializationException(e)
+        }
 
         /**
          * The attributes a track on [stream] had with the legacy stream-type constructor. The
