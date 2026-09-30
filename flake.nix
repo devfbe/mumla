@@ -121,6 +121,26 @@
             exec bash ${./tools/speech-corpus/generate.sh} "$@"
           '';
         };
+
+        # The voice the app ships for its double-talk self-test: MIT-licensed, trained from scratch
+        # on the public-domain LJ Speech dataset, so it may be redistributed inside the APK.
+        selftestVoice = pkgs.linkFarm "mumla-selftest-voice" (
+          piperVoice "en/en_US/ljspeech/medium/en_US-ljspeech-medium"
+            "sha256-b1KnUeI0mr56dnNesJ3Bh1KYx36iNC/9L+95/4G4fyI="
+            "sha256-FB1hLMCpXtfvwcqTa4RcI2SWfy6SF8Xb/PafxNbGWGA="
+        );
+
+        # Writes app/src/main/res/raw/double_talk_voice.ogg + tools/selftest-clip/MANIFEST.txt;
+        # run from the checkout's root.
+        selftestClip = pkgs.writeShellApplication {
+          name = "mumla-selftest-clip";
+          runtimeInputs = with pkgs; [ piper-tts sox opusTools coreutils gnused ];
+          text = ''
+            export PIPER_VOICES="${selftestVoice}"
+            export PIPER_VERSION="${pkgs.piper-tts.version}"
+            exec bash ${./tools/selftest-clip/generate.sh} "$@"
+          '';
+        };
       in {
         devShells.default = pkgs.mkShell {
           name = "mumla-android-dev";
@@ -146,6 +166,12 @@
         apps.speech-corpus = {
           type = "app";
           program = "${speechCorpus}/bin/mumla-speech-corpus";
+        };
+
+        # `nix run .#selftest-clip` regenerates the self-test's voice clip (commit the result).
+        apps.selftest-clip = {
+          type = "app";
+          program = "${selftestClip}/bin/mumla-selftest-clip";
         };
       }
     );
