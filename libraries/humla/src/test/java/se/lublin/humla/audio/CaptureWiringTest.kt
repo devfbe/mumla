@@ -64,13 +64,14 @@ class CaptureWiringTest {
         echo: EchoCancellationMode,
         factory: CapturePreprocessorFactory,
         sampleRate: Int = 48000,
+        rnnoiseLimitDb: Float = Float.POSITIVE_INFINITY,
         newResampler: (Int, Int) -> Resampler = { _, _ -> error("no resampler expected") },
     ) = CaptureWiring.wire(
-        sampleRate, ContinuousInputMode(), 1f, noise, echo, logger = logger, factory = factory,
-        newResampler = newResampler,
+        sampleRate, ContinuousInputMode(), 1f, noise, echo, rnnoiseAttenuationLimitDb = rnnoiseLimitDb,
+        logger = logger, factory = factory, newResampler = newResampler,
     )
 
-    /** The default: one RNNoise stage and its probability on every frame. */
+    /** One RNNoise stage and its probability on every frame; unlimited here, so its output is rnnoise's own. */
     @Test
     fun `the default chain denoises every frame with rnnoise`() {
         val api = FakeRnnoiseApi(probability = 0.9f, onProcess = { it.fill(11) })
@@ -82,6 +83,22 @@ class CaptureWiringTest {
         assertThat(frame.length).isEqualTo(FRAME)
         assertThat(frame.probability).isEqualTo(0.9f)
         assertThat(warnings).isEmpty()
+    }
+
+    /**
+     * The user's strength reaches the stage. The first frame's dry path is the delay line's
+     * silence, so 18 dB leaves exactly `(1 - 10^(-18/20))` of rnnoise's 11: 9.6, rounded to 10.
+     */
+    @Test
+    fun `the attenuation limit is wired into the rnnoise stage`() {
+        val api = FakeRnnoiseApi(probability = 0.9f, onProcess = { it.fill(11) })
+        val pipeline = wire(
+            NoiseSuppressionMode.RNNOISE, EchoCancellationMode.NONE, factory { api }, rnnoiseLimitDb = 18f,
+        ).pipeline
+
+        val frame = pipeline.process(ShortArray(FRAME) { 1000 }, FRAME)
+
+        assertThat(frame.samples.toSet()).containsExactly(10.toShort())
     }
 
     /** A missing `.so` is a skipped stage, not a dead microphone. */

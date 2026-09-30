@@ -35,11 +35,14 @@ private const val RNNOISE = "RNNoise noise suppression"
  *
  * @param farEndSink must be fed frames of exactly [farEndFrameSize] samples (use [FarEndFrameChunker]).
  * @param farEndFrameSize as reported by the APM, 0 without a sink.
+ * @param rnnoise the RNNoise stage when it is in the chain, so its attenuation limit can be moved
+ *   while the chain runs.
  */
 internal class CaptureChain(
     val preprocessor: CapturePreprocessor,
     val farEndSink: FarEndSink?,
     val farEndFrameSize: Int = 0,
+    val rnnoise: RnnoisePreprocessor? = null,
 )
 
 /**
@@ -61,10 +64,18 @@ internal class CapturePreprocessorFactory(
         noise: NoiseSuppressionMode,
         echo: EchoCancellationMode,
         speexNoiseSuppressDb: Int = SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB,
+        rnnoiseAttenuationLimitDb: Float = RnnoisePreprocessor.ATTENUATION_LIMIT_DB,
+        /**
+         * A stage that sees every frame after echo cancellation and before the denoiser, for the
+         * self-test's reference gate. It must leave the frame alone and return null; the chain
+         * releases it with the others.
+         */
+        beforeDenoiser: CapturePreprocessor? = null,
     ): CaptureChain {
         val stages = mutableListOf<CapturePreprocessor>()
         var farEnd: FarEndSink? = null
         var farEndFrameSize = 0
+        var rnnoise: RnnoisePreprocessor? = null
 
         try {
             // AEC first: anything time-varying in front keeps it from converging.
@@ -79,13 +90,18 @@ internal class CapturePreprocessorFactory(
                     farEndFrameSize = apm.farEndFrameSize
                 }
             }
+            beforeDenoiser?.let { stages += it }
             when (noise) {
                 NoiseSuppressionMode.NONE -> Unit
                 NoiseSuppressionMode.SPEEX ->
                     tryStage(SPEEX) { SpeexPreprocessor(speexApi(), noiseSuppressDb = speexNoiseSuppressDb) }
                         ?.let { stages += it }
                 NoiseSuppressionMode.RNNOISE ->
-                    tryStage(RNNOISE) { RnnoisePreprocessor(rnnoiseApi()) }?.let { stages += it }
+                    tryStage(RNNOISE) { RnnoisePreprocessor(rnnoiseApi(), rnnoiseAttenuationLimitDb) }
+                        ?.let {
+                            stages += it
+                            rnnoise = it
+                        }
             }
         } catch (e: Throwable) {
             for (stage in stages) stage.release()
@@ -97,7 +113,7 @@ internal class CapturePreprocessorFactory(
             1 -> stages[0]
             else -> ChainedPreprocessor(stages)
         }
-        return CaptureChain(preprocessor, farEnd, farEndFrameSize)
+        return CaptureChain(preprocessor, farEnd, farEndFrameSize, rnnoise)
     }
 
     /**

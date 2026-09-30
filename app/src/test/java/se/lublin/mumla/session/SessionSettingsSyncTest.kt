@@ -132,6 +132,29 @@ class SessionSettingsSyncTest {
         assertThat(pipeline().speexNoiseSuppressDb).isEqualTo(-35)
     }
 
+    /**
+     * The strength reconfigures a running session like every capture setting, without a
+     * reconnect: the new pipeline value is what the session rebuilds its chain from.
+     */
+    @Test
+    fun `the noise reduction strength reaches the running session, unlimited included`() {
+        prefs.edit().putInt(Settings.RNNOISE_ATTENUATION_LIMIT_DB.key, 30).commit()
+        assertThat(pipeline().rnnoiseAttenuationLimitDb).isEqualTo(30f)
+        val before = configures
+
+        prefs.edit().putInt(Settings.RNNOISE_ATTENUATION_LIMIT_DB.key, Settings.RNNOISE_LIMIT_UNLIMITED).commit()
+
+        assertThat(configures).isEqualTo(before + 1)
+        assertThat(pipeline().rnnoiseAttenuationLimitDb).isEqualTo(Float.POSITIVE_INFINITY)
+        verify(exactly = 0) { session.disconnect() }
+    }
+
+    @Test
+    fun `a session gets the 18 dB default while the user has not chosen a strength`() {
+        prefs.edit().putBoolean(Settings.HALF_DUPLEX.key, true).commit()
+        assertThat(pipeline().rnnoiseAttenuationLimitDb).isEqualTo(18f)
+    }
+
     /** The device saved in the chooser reaches the session, connected or not. */
     @Test
     fun `the saved audio device reaches the session`() {
@@ -197,6 +220,8 @@ class SessionSettingsSyncTest {
             "audio_test_microphone" to "not persisted: the settings screen's own meter switch",
             "vad_recalibrate" to "not persisted: restarts the settings screen's own measurement",
             "advanced_audio" to "a PreferenceCategory, not a setting",
+            "rnnoise_strength_reset" to "not persisted: writes the strength's default through Settings",
+            "double_talk_test" to "not persisted: opens the talk-over test",
         )
 
         val keys = mutableSetOf<String>()

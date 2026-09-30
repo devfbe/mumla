@@ -76,6 +76,7 @@ class MicCheck(private val context: Context, private val onReading: (MeterReadin
             loopback,
             // A capture thread that outlived stop()'s join must not reach a stopped test's meter.
             onReading = { reading -> mainHandler.post { if (preview === started) onReading(reading) } },
+            rnnoiseAttenuationLimitDb = settings.rnnoiseAttenuationLimitDb,
             captureFactory = captureFactory,
             sinkFactory = sinkFactory,
         )

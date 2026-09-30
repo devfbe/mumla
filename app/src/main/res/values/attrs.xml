@@ -27,5 +27,7 @@
         <!-- A string with one integer placeholder, the stored value divided by valueDivisor. -->
         <attr name="valueFormat" format="reference" />
         <attr name="valueDivisor" format="integer" />
+        <!-- Shown in place of the number at the slider's maximum, e.g. "Unlimited". -->
+        <attr name="maxValueLabel" format="reference" />
     </declare-styleable>
 </resources>

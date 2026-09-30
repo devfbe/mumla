@@ -23,6 +23,20 @@ import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.VadMode
 
 class AudioSettingsPolicyTest {
+    @Test
+    fun `the rnnoise strength is shown only while rnnoise is the denoiser`() {
+        assertThat(AudioSettingsPolicy.rnnoiseStrengthVisible(NoiseSuppressionMode.RNNOISE)).isTrue()
+        assertThat(AudioSettingsPolicy.rnnoiseStrengthVisible(NoiseSuppressionMode.SPEEX)).isFalse()
+        assertThat(AudioSettingsPolicy.rnnoiseStrengthVisible(NoiseSuppressionMode.NONE)).isFalse()
+    }
+
+    @Test
+    fun `the reset is enabled only while the strength differs from the default`() {
+        assertThat(AudioSettingsPolicy.rnnoiseResetEnabled(18, 18)).isFalse()
+        assertThat(AudioSettingsPolicy.rnnoiseResetEnabled(12, 18)).isTrue()
+        assertThat(AudioSettingsPolicy.rnnoiseResetEnabled(42, 18)).isTrue()
+    }
+
     /**
      * Hidden rather than disabled: the three modes measure incomparable quantities, and a
      * greyed-out slider still invites calibrating the wrong one.

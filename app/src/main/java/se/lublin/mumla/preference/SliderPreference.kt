@@ -37,6 +37,7 @@ private const val DEFAULT_MAX = 100
  *
  * Unlike androidx's `SeekBarPreference`, it snaps to steps and shows its value with a unit from
  * `valueFormat`, a string resource that gets the stored value divided by `valueDivisor`.
+ * `maxValueLabel` names the maximum instead of a number, for a slider whose end means "no limit".
  */
 class SliderPreference(context: Context, attrs: AttributeSet?) : Preference(context, attrs) {
     var min = 0
@@ -48,6 +49,9 @@ class SliderPreference(context: Context, attrs: AttributeSet?) : Preference(cont
 
     @StringRes
     private var format = 0
+
+    @StringRes
+    private var maxLabel = 0
     private var divisor = 1
     private var tracking = false
 
@@ -61,6 +65,7 @@ class SliderPreference(context: Context, attrs: AttributeSet?) : Preference(cont
             max = getInt(R.styleable.SliderPreference_max, DEFAULT_MAX)
             step = getInt(R.styleable.SliderPreference_valueStep, 1)
             format = getResourceId(R.styleable.SliderPreference_valueFormat, 0)
+            maxLabel = getResourceId(R.styleable.SliderPreference_maxValueLabel, 0)
             divisor = getInt(R.styleable.SliderPreference_valueDivisor, 1)
         }
         layoutResource = R.layout.preference_slider
@@ -68,8 +73,22 @@ class SliderPreference(context: Context, attrs: AttributeSet?) : Preference(cont
     }
 
     /** [value] with its unit, as shown beside the slider. */
-    fun formatted(value: Int): String =
-        if (format == 0) (value / divisor).toString() else context.getString(format, value / divisor)
+    fun formatted(value: Int): String = when {
+        maxLabel != 0 && value >= max -> context.getString(maxLabel)
+        format == 0 -> (value / divisor).toString()
+        else -> context.getString(format, value / divisor)
+    }
+
+    /**
+     * Re-reads the stored value, after something other than this row wrote it (a reset button, or
+     * another screen), and redraws the row.
+     */
+    fun reloadValue(default: Int) {
+        val stored = getPersistedInt(default)
+        if (stored == value) return
+        value = stored
+        notifyChanged()
+    }
 
     override fun onGetDefaultValue(a: TypedArray, index: Int): Any = a.getInt(index, min)
 

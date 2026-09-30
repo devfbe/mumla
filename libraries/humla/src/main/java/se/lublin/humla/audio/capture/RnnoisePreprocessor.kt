@@ -30,7 +30,9 @@ private const val WHAT = "the rnnoise denoiser"
  * RNNoise may attenuate by at most [attenuationLimitDb]: the output is `wet + a * (dry - wet)` with
  * `a = 10^(-limit/20)`, `dry` being the input delayed by `latency` samples so it lines up with
  * rnnoise's output (a misaligned mix would comb-filter). [Float.POSITIVE_INFINITY] is RNNoise
- * alone, bit for bit, with no delay line.
+ * alone, bit for bit. The limit can change while frames flow (the self-test's slider): the delay
+ * line is allocated once and kept filled whatever the limit, so a switch from unlimited to a finite
+ * limit mixes an aligned dry signal from its very first frame. Nothing is allocated per frame.
  *
  * The bridge rejects frames of the wrong length with -1 (no exception on the capture thread); this
  * stage counts those in [rejectedFrames]. Allocates one `Float` box per frame.
@@ -42,7 +44,7 @@ internal class RnnoisePreprocessor(
 ) : SingleHandleStage(
     // Checked before the native state exists, so a bad argument leaks nothing.
     run {
-        require(attenuationLimitDb >= 0f) { "attenuation limit must be at least 0 dB, got $attenuationLimitDb" }
+        requireValidLimit(attenuationLimitDb)
         require(latency >= 0) { "latency must not be negative, got $latency" }
         api.create()
     },
@@ -56,30 +58,42 @@ internal class RnnoisePreprocessor(
     var rejectedFrames: Int = 0
         private set
 
-    /** The dry signal's share `a`; 0 without a limit. */
-    private val dryGain: Float =
-        if (attenuationLimitDb == Float.POSITIVE_INFINITY) 0f else 10f.pow(-attenuationLimitDb / DB_PER_DECADE)
+    /** The dry signal's share `a`; 0 without a limit. Written by any thread, read per frame. */
+    @Volatile
+    private var dryGain: Float = dryGainOf(attenuationLimitDb)
 
-    private val mixing = dryGain > 0f
+    /**
+     * How far RNNoise may pull a frame down, dB; [Float.POSITIVE_INFINITY] for no limit. Takes
+     * effect from the next frame, from any thread.
+     */
+    @Volatile
+    var attenuationLimitDb: Float = attenuationLimitDb
+        set(value) {
+            requireValidLimit(value)
+            field = value
+            dryGain = dryGainOf(value)
+        }
 
-    /** The last `latency` input samples, a ring starting at [delayPosition]. Empty unless [mixing]. */
-    private val delayLine = ShortArray(if (mixing) latency else 0)
+    /** The last `latency` input samples, a ring starting at [delayPosition]. */
+    private val delayLine = ShortArray(latency)
     private var delayPosition = 0
 
     /** This frame's dry samples: the input from `latency` samples ago. */
-    private val dry = ShortArray(if (mixing) FRAME_SIZE else 0)
+    private val dry = ShortArray(FRAME_SIZE)
 
     override fun onCaptureFrame(handle: Long, frame: ShortArray): Float? {
         // A short frame is refused by the bridge and must leave the delay line alone.
-        val mix = mixing && frame.size >= FRAME_SIZE
-        if (mix) delay(frame)
+        val whole = frame.size >= FRAME_SIZE
+        if (whole) delay(frame)
         val probability = api.processFrame(handle, frame)
         // Inverted so NaN is rejected too. -1 is not clamped to 0: that would read as "not speech".
         if (!(probability >= 0f)) {
             rejectedFrames++
             return null
         }
-        if (mix) limit(frame)
+        // Read once: the gain may change between two frames, never within one.
+        val a = dryGain
+        if (whole && a > 0f) limit(frame, a)
         // Values above 1 would never pass a [0, 1] threshold; clamp.
         return probability.coerceAtMost(1f)
     }
@@ -101,8 +115,7 @@ internal class RnnoisePreprocessor(
     }
 
     /** `wet + a * (dry - wet)`: a convex combination of two samples, so it cannot overflow. */
-    private fun limit(frame: ShortArray) {
-        val a = dryGain
+    private fun limit(frame: ShortArray, a: Float) {
         for (i in 0 until FRAME_SIZE) {
             val wet = frame[i].toFloat()
             frame[i] = Math.round(wet + a * (dry[i] - wet)).toShort()
@@ -124,12 +137,20 @@ internal class RnnoisePreprocessor(
         const val LATENCY_SAMPLES = 2 * FRAME_SIZE
 
         /**
-         * How far RNNoise may pull a frame down in the app's chains; see the class KDoc. Unlimited
-         * for now: `RnnoiseAttenuationLimitDeviceTest` found 24 dB lifts the gate in double talk
-         * from about 44 % to 85 % of voiced near-end frames and halves echo-only false transmit on
-         * average, but on a loud nonlinear echo path it opens on echo alone 12 points more often
-         * than without a limit, past the 5-point bound set for shipping it.
+         * How far RNNoise may pull a frame down by default; the user can change it (the "noise
+         * reduction strength" setting). 18 dB: in a real room on speakerphone
+         * (`RoomAcousticsDeviceTest`, SM-S938B) it lifted the double-talk gate from 94 / 60 / 17 % to
+         * 97 / 91 / 80 % of voiced near-end frames (loud / mid / quiet talker) with echo-only false
+         * transmit still 0 %; with real speech in simulation (`RealSpeechDeviceTest`) 12 and 18 dB
+         * raised the gate from 74 % to 85 % and opened on echo alone at most 0.4 points more often
+         * than no limit, where 24 dB (+3.6) and 30 dB (+7.2) did not hold that line.
          */
-        const val ATTENUATION_LIMIT_DB = Float.POSITIVE_INFINITY
+        const val ATTENUATION_LIMIT_DB = 18f
+
+        private fun requireValidLimit(limitDb: Float) =
+            require(limitDb >= 0f) { "attenuation limit must be at least 0 dB, got $limitDb" }
+
+        private fun dryGainOf(limitDb: Float): Float =
+            if (limitDb == Float.POSITIVE_INFINITY) 0f else 10f.pow(-limitDb / DB_PER_DECADE)
     }
 }

@@ -25,6 +25,7 @@ import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.NoopPreprocessor
 import se.lublin.humla.audio.capture.Resampler
+import se.lublin.humla.audio.capture.RnnoisePreprocessor
 import se.lublin.humla.audio.capture.SpeexPreprocessor
 import se.lublin.humla.audio.capture.SpeexResampler
 import se.lublin.humla.util.HumlaLog
@@ -51,6 +52,7 @@ internal object CaptureWiring {
         noise: NoiseSuppressionMode,
         echo: EchoCancellationMode,
         speexNoiseSuppressDb: Int = SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB,
+        rnnoiseAttenuationLimitDb: Float = RnnoisePreprocessor.ATTENUATION_LIMIT_DB,
         logger: HumlaLogger? = null,
         factory: CapturePreprocessorFactory? = null,
         newResampler: (Int, Int) -> Resampler = { from, to -> SpeexResampler(from, to) },
@@ -59,7 +61,8 @@ internal object CaptureWiring {
             HumlaLog.w(TAG, message)
             logger?.logWarning(message)
         }
-        val chain = (factory ?: CapturePreprocessorFactory(log = log)).create(noise, echo, speexNoiseSuppressDb)
+        val chain = (factory ?: CapturePreprocessorFactory(log = log))
+            .create(noise, echo, speexNoiseSuppressDb, rnnoiseAttenuationLimitDb)
         if (noise != NoiseSuppressionMode.NONE && chain.preprocessor === NoopPreprocessor) {
             log("noise suppression (${noise.preferenceValue}) is not running on this device")
         }

@@ -107,7 +107,7 @@ internal class AudioHandler(
         // far-end tap to AudioOutput's playback thread, which must feed the reference for AEC to work.
         val wiring = CaptureWiring.wire(
             input.sampleRate, params.inputMode, settings.amplitudeBoost, settings.noiseSuppression, echo,
-            settings.speexNoiseSuppressDb, logger,
+            settings.speexNoiseSuppressDb, settings.rnnoiseAttenuationLimitDb, logger,
         )
         capturePipeline = wiring.pipeline
         val halfDuplex = config.halfDuplex

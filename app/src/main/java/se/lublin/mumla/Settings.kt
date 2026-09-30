@@ -221,6 +221,27 @@ class Settings private constructor(private val context: Context) {
         get() = preferences.getString(SPEEX_NOISE_SUPPRESS_DB.key, null)?.toIntOrNull()
             ?.takeIf { it in PipelineSettings.SPEEX_NOISE_SUPPRESS_DB } ?: SPEEX_NOISE_SUPPRESS_DB.default
 
+    /**
+     * The noise reduction strength as stored by its slider: dB from [RNNOISE_LIMIT_MIN_DB] to
+     * [RNNOISE_LIMIT_MAX_DB], or [RNNOISE_LIMIT_UNLIMITED] for no limit. Writing it reconfigures a
+     * running session like any audio setting.
+     */
+    var rnnoiseStrength: Int
+        get() = preferences.read(RNNOISE_ATTENUATION_LIMIT_DB)
+        set(value) = preferences.edit { write(RNNOISE_ATTENUATION_LIMIT_DB, value) }
+
+    /** How far RNNoise may pull a frame down, dB; [Float.POSITIVE_INFINITY] for no limit. */
+    val rnnoiseAttenuationLimitDb: Float
+        get() = rnnoiseLimitDbOf(rnnoiseStrength)
+
+    /** Whether the strength is still the shipped default, so a reset would change nothing. */
+    val isRnnoiseStrengthDefault: Boolean
+        get() = rnnoiseStrength == RNNOISE_ATTENUATION_LIMIT_DB.default
+
+    fun resetRnnoiseStrength() {
+        rnnoiseStrength = RNNOISE_ATTENUATION_LIMIT_DB.default
+    }
+
     val vadMode: VadMode get() = VadMode.fromPreferenceValue(preferences.read(VAD_MODE))
 
     /**
@@ -408,6 +429,30 @@ class Settings private constructor(private val context: Context) {
 
         /** Stored as a string because it is a ListPreference; -15/-25/-35. */
         val SPEEX_NOISE_SUPPRESS_DB = Pref("speex_noise_suppress_db", -25)
+
+        /**
+         * RNNoise's attenuation limit ("noise reduction strength"), dB, as an int slider stores it;
+         * [RNNOISE_LIMIT_UNLIMITED] means no limit. Installs from before the setting have no value
+         * and read the default, so they move from no limit to 18 dB with no migration.
+         */
+        val RNNOISE_ATTENUATION_LIMIT_DB = Pref(
+            "rnnoise_attenuation_limit_db",
+            PipelineSettings.DEFAULT_RNNOISE_ATTENUATION_LIMIT_DB.toInt(),
+        )
+        const val RNNOISE_LIMIT_MIN_DB = 6
+        const val RNNOISE_LIMIT_MAX_DB = 40
+        const val RNNOISE_LIMIT_STEP_DB = 2
+
+        /** The slider's last position, one step past [RNNOISE_LIMIT_MAX_DB]: no limit. */
+        const val RNNOISE_LIMIT_UNLIMITED = RNNOISE_LIMIT_MAX_DB + RNNOISE_LIMIT_STEP_DB
+
+        /**
+         * The limit a stored strength stands for. Clamped, because preference files can hold
+         * anything (debug edits, downgrades) and the pipeline refuses a negative limit.
+         */
+        fun rnnoiseLimitDbOf(strength: Int): Float =
+            if (strength >= RNNOISE_LIMIT_UNLIMITED) Float.POSITIVE_INFINITY
+            else strength.coerceIn(RNNOISE_LIMIT_MIN_DB, RNNOISE_LIMIT_MAX_DB).toFloat()
 
         /**
          * One of [VadMode.preferenceValue]. Switching modes keeps `vadThreshold` on disk, so going

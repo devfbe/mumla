@@ -152,14 +152,67 @@ class RnnoisePreprocessorTest {
     }
 
     /**
-     * The limit is built but not shipped: every measured value broke the echo-only bound somewhere
-     * (see [RnnoisePreprocessor.ATTENUATION_LIMIT_DB]). Changing it means re-running
-     * `RnnoiseAttenuationLimitDeviceTest` and moving `shippedChainInDoubleTalk`'s bounds.
+     * 18 dB ships (see [RnnoisePreprocessor.ATTENUATION_LIMIT_DB]); the user may move it. Changing
+     * the default means re-running `RoomAcousticsDeviceTest`, `RealSpeechDeviceTest` and
+     * `DoubleTalkAec3DeviceTest.shippedChainInDoubleTalk` and moving their bounds.
      */
     @Test
-    fun `the shipped chain does not limit rnnoise and the dry path matches its two-frame latency`() {
-        assertThat(RnnoisePreprocessor.ATTENUATION_LIMIT_DB).isEqualTo(Float.POSITIVE_INFINITY)
+    fun `the shipped chain limits rnnoise to 18 dB and the dry path matches its two-frame latency`() {
+        assertThat(RnnoisePreprocessor.ATTENUATION_LIMIT_DB).isEqualTo(18f)
+        assertThat(RnnoisePreprocessor(api).attenuationLimitDb).isEqualTo(18f)
         assertThat(RnnoisePreprocessor.LATENCY_SAMPLES).isEqualTo(2 * FRAME)
+    }
+
+    /**
+     * The self-test's slider moves the limit while frames flow. The delay line runs whatever the
+     * limit, so the first frame after a switch to a finite limit already mixes an aligned dry path.
+     */
+    @Test
+    fun `a limit set while running applies from the next frame, aligned from its first sample`() {
+        val limitDb = 12f
+        val gain = 0.1f
+        val a = 10f.pow(-limitDb / 20f)
+        val stage = RnnoisePreprocessor(
+            FakeRnnoiseApi(probability = 0.5f, onProcess = DelayingDenoiser(gain)::process), Float.POSITIVE_INFINITY,
+        )
+        val frame = ShortArray(FRAME)
+        for (f in 0 until 8) {
+            if (f == 4) stage.attenuationLimitDb = limitDb
+            for (i in 0 until FRAME) frame[i] = input(f * FRAME + i)
+            stage.process(frame)
+            val mix = if (f < 4) gain else (1 - a) * gain + a
+            for (i in 0 until FRAME) {
+                val n = f * FRAME + i
+                if (n < LATENCY) continue
+                assertWithMessage("frame %s sample %s", f, i).that(abs(frame[i] - input(n - LATENCY) * mix))
+                    .isAtMost(1f)
+            }
+        }
+    }
+
+    /** Back to no limit mid-stream: rnnoise's own output again, sample for sample. */
+    @Test
+    fun `switching back to no limit is rnnoise's own output again`() {
+        val limited = RnnoisePreprocessor(FakeRnnoiseApi(onProcess = DelayingDenoiser(0.3f)::process), 12f)
+        run(limited, 3)
+        limited.attenuationLimitDb = Float.POSITIVE_INFINITY
+        val bare = DelayingDenoiser(0.3f)
+        repeat(3) { f -> bare.process(ShortArray(FRAME) { input(f * FRAME + it) }) }
+
+        val frame = ShortArray(FRAME) { input(3 * FRAME + it) }
+        limited.process(frame)
+        val expected = ShortArray(FRAME) { input(3 * FRAME + it) }
+        bare.process(expected)
+
+        assertThat(frame).isEqualTo(expected)
+    }
+
+    @Test
+    fun `a negative limit set while running is refused and the old one kept`() {
+        val stage = RnnoisePreprocessor(api, 18f)
+
+        assertThrows(IllegalArgumentException::class.java) { stage.attenuationLimitDb = -3f }
+        assertThat(stage.attenuationLimitDb).isEqualTo(18f)
     }
 
     /** A refused frame never reached rnnoise, so it must not enter the dry path either. */

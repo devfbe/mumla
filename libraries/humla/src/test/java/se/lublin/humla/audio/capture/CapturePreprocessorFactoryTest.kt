@@ -193,6 +193,45 @@ class CapturePreprocessorFactoryTest {
         assertThat(apm.destroyed).isEqualTo(1)
     }
 
+    /** The user's strength reaches the stage, the shipped 18 dB without one, and the chain hands it out. */
+    @Test
+    fun `rnnoise gets the requested attenuation limit, or 18 dB when none is asked for`() {
+        val limited = factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC, rnnoiseAttenuationLimitDb = 30f)
+        val unlimited = factory.create(
+            NoiseSuppressionMode.RNNOISE, EchoCancellationMode.NONE, rnnoiseAttenuationLimitDb = Float.POSITIVE_INFINITY,
+        )
+        val default = factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.NONE)
+
+        assertThat(limited.rnnoise?.attenuationLimitDb).isEqualTo(30f)
+        assertThat(unlimited.rnnoise?.attenuationLimitDb).isEqualTo(Float.POSITIVE_INFINITY)
+        assertThat(default.rnnoise?.attenuationLimitDb).isEqualTo(18f)
+        assertThat(unlimited.rnnoise).isSameInstanceAs(unlimited.preprocessor)
+        assertThat(factory.create(NoiseSuppressionMode.SPEEX, EchoCancellationMode.WEBRTC).rnnoise).isNull()
+    }
+
+    /** The self-test's reference gate sees the frame after the canceller and before the denoiser. */
+    @Test
+    fun `a stage before the denoiser runs between the canceller and rnnoise`() {
+        val tap = object : CapturePreprocessor {
+            var released = false
+            override fun process(frame: ShortArray): Float? {
+                order += "tap"
+                return null
+            }
+
+            override fun release() {
+                released = true
+            }
+        }
+        val chain = factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC, beforeDenoiser = tap)
+
+        assertThat(chain.preprocessor.process(ShortArray(FRAME))).isEqualTo(0.95f)
+        chain.preprocessor.release()
+
+        assertThat(order).containsExactly("apm", "tap", "rnnoise").inOrder()
+        assertThat(tap.released).isTrue()
+    }
+
     private class Outcome(val order: List<String>, val probability: Float?, val logs: List<String>, val farEnd: Boolean)
 
     /**

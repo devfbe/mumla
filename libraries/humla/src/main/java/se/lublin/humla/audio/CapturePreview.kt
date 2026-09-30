@@ -97,11 +97,13 @@ public class CapturePreview internal constructor(
     private val captureFactory: PcmCaptureSourceFactory,
     private val sinkFactory: PcmPlaybackSinkFactory,
     private val preprocessorFactory: CapturePreprocessorFactory,
+    private val rnnoiseAttenuationLimitDb: Float = PipelineSettings.DEFAULT_RNNOISE_ATTENUATION_LIMIT_DB,
     private val resamplerFactory: (Int, Int) -> Resampler,
 ) {
     /**
      * [onReading] is called on the capture thread. [captureFactory] and [sinkFactory] replace the
-     * microphone and the speaker.
+     * microphone and the speaker. [rnnoiseAttenuationLimitDb] is RNNoise's limit, as in
+     * [PipelineSettings.rnnoiseAttenuationLimitDb].
      */
     public constructor(
         audioManager: AudioManager,
@@ -112,12 +114,14 @@ public class CapturePreview internal constructor(
         effects: AndroidAudioEffects,
         loopback: Boolean,
         onReading: (MeterReading) -> Unit,
+        rnnoiseAttenuationLimitDb: Float = PipelineSettings.DEFAULT_RNNOISE_ATTENUATION_LIMIT_DB,
         captureFactory: PcmCaptureSourceFactory = AndroidAudioRecordSource.Factory(),
         sinkFactory: PcmPlaybackSinkFactory = AndroidAudioTrackSink.Factory(),
     ) : this(
         audioManager, vadConfig, noiseSuppression, speexNoiseSuppressDb, echoCancellation, effects, loopback,
         onReading, DEFAULT_READING_INTERVAL_FRAMES, captureFactory, sinkFactory,
-        CapturePreprocessorFactory(log = { HumlaLog.w(TAG, it) }), { from, to -> SpeexResampler(from, to) },
+        CapturePreprocessorFactory(log = { HumlaLog.w(TAG, it) }), rnnoiseAttenuationLimitDb,
+        { from, to -> SpeexResampler(from, to) },
     )
 
     private var source: PcmCaptureSource? = null
@@ -147,7 +151,9 @@ public class CapturePreview internal constructor(
         )
         var started = false
         try {
-            val chain = preprocessorFactory.create(noiseSuppression, echoCancellation, speexNoiseSuppressDb)
+            val chain = preprocessorFactory.create(
+                noiseSuppression, echoCancellation, speexNoiseSuppressDb, rnnoiseAttenuationLimitDb,
+            )
             val rate = AudioHandler.SAMPLE_RATE
             val resampler = if (src.sampleRate != rate) resamplerFactory(src.sampleRate, rate) else null
             val pipe = CapturePipeline(
@@ -181,57 +187,11 @@ public class CapturePreview internal constructor(
             if (read < 0) break
             if (read > 0) {
                 val frame = pipe.process(buffer, read)
-                if (++count % readingIntervalFrames == 0) onReading(currentReading())
+                if (++count % readingIntervalFrames == 0) onReading(detector.meterReading(vadConfig))
                 snk?.write(if (frame.transmit) frame.samples else silence, frame.length)
             }
         }
         src.stop()
-    }
-
-    /**
-     * The reading, taken off the same detector the gate just used, so the meter never shows a
-     * number the gate does not act on.
-     */
-    private fun currentReading(): MeterReading {
-        val level = detector.lastLevelDbfs
-        val voice = detector.isTalking
-        return when (vadConfig.mode) {
-            VadMode.ADAPTIVE -> {
-                val threshold = detector.thresholdDbfs
-                MeterReading(
-                    levelDbfs = level,
-                    floorDbfs = detector.floorDbfs,
-                    speechDbfs = detector.speechDbfs,
-                    thresholdDbfs = threshold,
-                    voice = voice,
-                    holding = voice && level < threshold,
-                    tooClose = detector.tooClose,
-                )
-            }
-            VadMode.AMPLITUDE -> {
-                // The legacy slider is a score on the 96 dB curve; this is that score as a level,
-                // so the mark the user drags and the mark the meter draws are the same number.
-                val threshold = VoiceActivityDetector.scoreToDbfs(vadConfig.startThreshold)
-                MeterReading(
-                    levelDbfs = level,
-                    floorDbfs = null,
-                    speechDbfs = null,
-                    thresholdDbfs = threshold,
-                    voice = voice,
-                    holding = voice && level < threshold,
-                    tooClose = false,
-                )
-            }
-            VadMode.PROBABILITY -> MeterReading(
-                levelDbfs = level,
-                floorDbfs = null,
-                speechDbfs = null,
-                thresholdDbfs = null,
-                voice = voice,
-                holding = false,
-                tooClose = false,
-            )
-        }
     }
 
     public fun stop() {
@@ -257,5 +217,51 @@ public class CapturePreview internal constructor(
         if (!ownsCommunicationMode) return
         audioManager.mode = AudioManager.MODE_NORMAL
         ownsCommunicationMode = false
+    }
+}
+
+/**
+ * The reading, taken off the same detector the gate just used, so the meter never shows a number
+ * the gate does not act on. [vadConfig] is the one the detector was built with.
+ */
+internal fun VoiceActivityDetector.meterReading(vadConfig: VadConfig): MeterReading {
+    val level = lastLevelDbfs
+    val voice = isTalking
+    return when (vadConfig.mode) {
+        VadMode.ADAPTIVE -> {
+            val threshold = thresholdDbfs
+            MeterReading(
+                levelDbfs = level,
+                floorDbfs = floorDbfs,
+                speechDbfs = speechDbfs,
+                thresholdDbfs = threshold,
+                voice = voice,
+                holding = voice && level < threshold,
+                tooClose = tooClose,
+            )
+        }
+        VadMode.AMPLITUDE -> {
+            // The legacy slider is a score on the 96 dB curve; this is that score as a level,
+            // so the mark the user drags and the mark the meter draws are the same number.
+            val threshold = VoiceActivityDetector.scoreToDbfs(vadConfig.startThreshold)
+            MeterReading(
+                levelDbfs = level,
+                floorDbfs = null,
+                speechDbfs = null,
+                thresholdDbfs = threshold,
+                voice = voice,
+                holding = voice && level < threshold,
+                tooClose = false,
+            )
+        }
+        VadMode.PROBABILITY -> MeterReading(
+            levelDbfs = level,
+            floorDbfs = null,
+            speechDbfs = null,
+            thresholdDbfs = null,
+            voice = voice,
+            holding = false,
+            tooClose = false,
+        )
     }
 }

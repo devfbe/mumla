@@ -85,6 +85,48 @@ class SettingsAudioTest {
         assertThat(settings.speexNoiseSuppressDb).isEqualTo(-25)
     }
 
+    // --- RNNoise's strength: a slider in dB whose last position is "no limit" --------------------
+
+    /**
+     * The migration: an install from before the setting has no value stored and reads the new
+     * default, so it moves from "no limit" to 18 dB without a rewrite of its preferences.
+     */
+    @Test
+    fun `an existing install without a stored strength reads the 18 dB default`() {
+        prefs.edit().putString(Settings.NOISE_SUPPRESSION_METHOD.key, "rnnoise").putInt(Settings.THRESHOLD.key, 40)
+            .commit()
+
+        assertThat(prefs.contains(Settings.RNNOISE_ATTENUATION_LIMIT_DB.key)).isFalse()
+        assertThat(settings.rnnoiseStrength).isEqualTo(18)
+        assertThat(settings.rnnoiseAttenuationLimitDb).isEqualTo(18f)
+        assertThat(settings.isRnnoiseStrengthDefault).isTrue()
+    }
+
+    @Test
+    fun `the last slider position is no limit and anything else is decibels, clamped to the range`() {
+        settings.rnnoiseStrength = 30
+        assertThat(settings.rnnoiseAttenuationLimitDb).isEqualTo(30f)
+        settings.rnnoiseStrength = Settings.RNNOISE_LIMIT_UNLIMITED
+        assertThat(settings.rnnoiseAttenuationLimitDb).isEqualTo(Float.POSITIVE_INFINITY)
+        settings.rnnoiseStrength = 500
+        assertThat(settings.rnnoiseAttenuationLimitDb).isEqualTo(Float.POSITIVE_INFINITY)
+        // A hand-edited file below the range must not reach the pipeline as a negative limit.
+        settings.rnnoiseStrength = -4
+        assertThat(settings.rnnoiseAttenuationLimitDb).isEqualTo(Settings.RNNOISE_LIMIT_MIN_DB.toFloat())
+        assertThat(Settings.RNNOISE_LIMIT_UNLIMITED).isEqualTo(Settings.RNNOISE_LIMIT_MAX_DB + Settings.RNNOISE_LIMIT_STEP_DB)
+    }
+
+    @Test
+    fun `the reset puts any strength back to 18 dB`() {
+        settings.rnnoiseStrength = Settings.RNNOISE_LIMIT_UNLIMITED
+        assertThat(settings.isRnnoiseStrengthDefault).isFalse()
+
+        settings.resetRnnoiseStrength()
+
+        assertThat(settings.rnnoiseStrength).isEqualTo(18)
+        assertThat(settings.isRnnoiseStrengthDefault).isTrue()
+    }
+
     @Test
     fun `echo cancellation follows the kind of device until the user overrides it`() {
         assertThat(settings.isEchoCancellationEnabled(AudioDeviceCategory.SPEAKER)).isTrue()

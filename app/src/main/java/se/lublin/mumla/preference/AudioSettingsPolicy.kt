@@ -41,4 +41,10 @@ object AudioSettingsPolicy {
 
     /** The Speex depth only matters when Speex is the denoiser in the chain. */
     fun speexDepthVisible(mode: NoiseSuppressionMode): Boolean = mode == NoiseSuppressionMode.SPEEX
+
+    /** RNNoise's strength, and its reset, only matter when RNNoise is the denoiser in the chain. */
+    fun rnnoiseStrengthVisible(mode: NoiseSuppressionMode): Boolean = mode == NoiseSuppressionMode.RNNOISE
+
+    /** A reset that would change nothing is shown, but greyed out, like the platform's own. */
+    fun rnnoiseResetEnabled(strength: Int, default: Int): Boolean = strength != default
 }

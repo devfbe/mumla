@@ -53,6 +53,7 @@ object SessionSettings {
         Settings.HALF_DUPLEX.key,
         Settings.NOISE_SUPPRESSION_METHOD.key,
         Settings.SPEEX_NOISE_SUPPRESS_DB.key,
+        Settings.RNNOISE_ATTENUATION_LIMIT_DB.key,
         Settings.ANDROID_NOISE_SUPPRESSOR.key,
         Settings.ANDROID_AGC.key,
         Settings.INPUT_QUALITY.key,
@@ -80,6 +81,7 @@ object SessionSettings {
             amplitudeBoost = settings.amplitudeBoostMultiplier,
             noiseSuppression = settings.noiseSuppressionMode,
             speexNoiseSuppressDb = settings.speexNoiseSuppressDb,
+            rnnoiseAttenuationLimitDb = settings.rnnoiseAttenuationLimitDb,
             androidEffects = settings.androidAudioEffects,
         ),
     )

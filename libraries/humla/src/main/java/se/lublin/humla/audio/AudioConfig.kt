@@ -22,6 +22,7 @@ import android.media.MediaRecorder
 import se.lublin.humla.audio.capture.AndroidAudioEffects
 import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.NoiseSuppressionMode
+import se.lublin.humla.audio.capture.RnnoisePreprocessor
 import se.lublin.humla.audio.capture.SpeexPreprocessor
 
 /** The user's settings the audio pipeline is built from, handed through unchanged. */
@@ -36,11 +37,23 @@ public data class PipelineSettings(
     val noiseSuppression: NoiseSuppressionMode = NoiseSuppressionMode.NONE,
     /** One of [SPEEX_NOISE_SUPPRESS_DB]. */
     val speexNoiseSuppressDb: Int = SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB,
+    /**
+     * How far RNNoise may pull a frame down, dB, at least 0; [Float.POSITIVE_INFINITY] for no limit.
+     * Only read with [NoiseSuppressionMode.RNNOISE].
+     */
+    val rnnoiseAttenuationLimitDb: Float = DEFAULT_RNNOISE_ATTENUATION_LIMIT_DB,
     val androidEffects: AndroidAudioEffects = AndroidAudioEffects(),
 ) {
+    init {
+        require(rnnoiseAttenuationLimitDb >= 0f) { "attenuation limit must be at least 0 dB" }
+    }
+
     public companion object {
         /** The maximum suppressions in dB Speex's denoiser is offered at. */
         public val SPEEX_NOISE_SUPPRESS_DB: List<Int> get() = SpeexPreprocessor.SUPPORTED_NOISE_SUPPRESS_DB
+
+        /** RNNoise's attenuation limit when the user has not chosen one. */
+        public const val DEFAULT_RNNOISE_ATTENUATION_LIMIT_DB: Float = RnnoisePreprocessor.ATTENUATION_LIMIT_DB
     }
 }
 
