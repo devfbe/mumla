@@ -122,6 +122,29 @@ class MumlaServiceForegroundTest {
         assertThat(log()).doesNotContain(app.getString(R.string.foreground_start_failed))
     }
 
+    /**
+     * The whole automatic reconnect with the screen off, through to the new ServerSync: the
+     * microphone service stays in the foreground and is never started again. With every start
+     * refused, a second startForeground would show as the warning.
+     */
+    @Test
+    fun aReconnectThatSynchronizesAgainNeverCallsStartForegroundAgain() {
+        synchronize()
+        service.refuseForegroundStarts()
+        loseConnection()
+        mainLooper.idleFor(Duration.ofMillis(2_000))
+
+        synchronize()
+
+        assertThat(server.attempts).isEqualTo(2)
+        assertThat(state).isEqualTo(SessionState.Connected)
+        assertThat(shadowOf(service).isForegroundStopped).isFalse()
+        assertThat(foregroundText()).isNotEqualTo(app.getString(R.string.connection_lost_reconnecting))
+        assertThat(foregroundActions()).doesNotContain(app.getString(R.string.cancel_reconnect))
+        assertThat(log()).doesNotContain(app.getString(R.string.foreground_start_failed))
+        assertThat(reconnectPrompt()).isNull()
+    }
+
     @Test
     fun aDisconnectTheUserAskedForLeavesTheForegroundAndStopsTheService() {
         sessions.disconnect()
