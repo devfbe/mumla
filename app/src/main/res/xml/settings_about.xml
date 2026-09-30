@@ -64,5 +64,12 @@
                 android:action="android.intent.action.VIEW"
                 android:data="@string/license_apache2_link"/>
         </Preference>
+        <!-- The talk-over test's voice ships in the APK; see tools/selftest-clip/MANIFEST.txt. -->
+        <Preference android:title="@string/license_selftest_voice"
+            app:iconSpaceReserved="false">
+            <intent
+                android:action="android.intent.action.VIEW"
+                android:data="@string/license_selftest_voice_link"/>
+        </Preference>
     </PreferenceCategory>
 </PreferenceScreen>

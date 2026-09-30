@@ -36,9 +36,12 @@ import se.lublin.humla.audio.capture.NoiseSuppressionMode
 import se.lublin.humla.audio.capture.VadMode
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.audio.routing.listCommunicationDevices
+import se.lublin.humla.session.SessionState
 import se.lublin.mumla.R
 import se.lublin.mumla.Settings
+import se.lublin.mumla.audio.DoubleTalkTestSheet
 import se.lublin.mumla.audio.MicCheck
+import se.lublin.mumla.session.SessionManager
 import se.lublin.mumla.session.SessionSettings
 import se.lublin.mumla.util.changes
 
@@ -69,6 +72,7 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
             true
         }
         applyNoiseDependents(NoiseSuppressionMode.fromPreferenceValue(noisePref.value))
+        bindRnnoiseStrength()
 
         val vadModePref = requireNotNull(findPreference<ListPreference>(Settings.VAD_MODE.key))
         vadModePref.setOnPreferenceChangeListener { _, newValue ->
@@ -159,7 +163,11 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
         // A running preview is rebuilt from the same settings the service reconfigures from.
         val preferences = preferenceManager.sharedPreferences ?: return
         viewLifecycleOwner.lifecycleScope.launch {
-            preferences.changes(SessionSettings.AUDIO_KEYS).collect { if (isTesting) restartPreview() }
+            preferences.changes(SessionSettings.AUDIO_KEYS).collect { key ->
+                // The talk-over test and the reset write the strength without this row.
+                if (key == Settings.RNNOISE_ATTENUATION_LIMIT_DB.key) showRnnoiseStrength()
+                if (isTesting) restartPreview()
+            }
         }
     }
 
@@ -167,6 +175,8 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
         super.onResume()
         // A headset may have come or gone, or the toolbar chooser saved another device.
         refreshAudioDevices()
+        showDoubleTalkTestAvailability()
+        showRnnoiseStrength()
         // The test takes the microphone and may switch to communication mode, which quietens
         // other apps' audio, so it only runs while the user asks for it.
         findPreference<SwitchPreferenceCompat>(KEY_TEST)?.setOnPreferenceChangeListener { _, newValue ->
@@ -231,6 +241,53 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
     private fun applyNoiseDependents(mode: NoiseSuppressionMode) {
         findPreference<Preference>(Settings.SPEEX_NOISE_SUPPRESS_DB.key)?.isVisible =
             AudioSettingsPolicy.speexDepthVisible(mode)
+        val rnnoise = AudioSettingsPolicy.rnnoiseStrengthVisible(mode)
+        findPreference<Preference>(Settings.RNNOISE_ATTENUATION_LIMIT_DB.key)?.isVisible = rnnoise
+        findPreference<Preference>(KEY_RNNOISE_RESET)?.isVisible = rnnoise
+    }
+
+    private fun bindRnnoiseStrength() {
+        findPreference<SliderPreference>(Settings.RNNOISE_ATTENUATION_LIMIT_DB.key)
+            ?.setOnPreferenceChangeListener { _, newValue ->
+                showRnnoiseReset(newValue as Int)
+                true
+            }
+        findPreference<Preference>(KEY_RNNOISE_RESET)?.apply {
+            summary = getString(R.string.rnnoise_strength_reset_sum, Settings.RNNOISE_ATTENUATION_LIMIT_DB.default)
+            setOnPreferenceClickListener {
+                Settings.getInstance(requireContext()).resetRnnoiseStrength()
+                showRnnoiseStrength()
+                true
+            }
+        }
+        findPreference<Preference>(KEY_DOUBLE_TALK_TEST)?.setOnPreferenceClickListener {
+            // The test needs the microphone for itself.
+            findPreference<SwitchPreferenceCompat>(KEY_LOOPBACK)?.isChecked = false
+            findPreference<SwitchPreferenceCompat>(KEY_TEST)?.isChecked = false
+            stopPreview()
+            DoubleTalkTestSheet.show(childFragmentManager)
+            true
+        }
+    }
+
+    /** The stored strength on the slider, and the reset enabled only while it differs from the default. */
+    private fun showRnnoiseStrength() {
+        val default = Settings.RNNOISE_ATTENUATION_LIMIT_DB.default
+        findPreference<SliderPreference>(Settings.RNNOISE_ATTENUATION_LIMIT_DB.key)?.reloadValue(default)
+        showRnnoiseReset(Settings.getInstance(requireContext()).rnnoiseStrength)
+    }
+
+    private fun showRnnoiseReset(strength: Int) {
+        findPreference<Preference>(KEY_RNNOISE_RESET)?.isEnabled =
+            AudioSettingsPolicy.rnnoiseResetEnabled(strength, Settings.RNNOISE_ATTENUATION_LIMIT_DB.default)
+    }
+
+    /** The test would take the microphone and the speaker from a call, so it is offered only without one. */
+    private fun showDoubleTalkTestAvailability() {
+        val test = findPreference<Preference>(KEY_DOUBLE_TALK_TEST) ?: return
+        val available = SessionManager.get(requireContext()).currentState is SessionState.Disconnected
+        test.isEnabled = available
+        test.summary = getString(if (available) R.string.double_talk_test_sum else R.string.double_talk_connected)
     }
 
     /**
@@ -269,6 +326,8 @@ open class AudioSettingsFragment : MumlaPreferenceFragment(R.xml.settings_audio)
         private const val KEY_TEST = "audio_test_microphone"
         private const val KEY_LOOPBACK = "audio_loopback_test"
         private const val KEY_RECALIBRATE = "vad_recalibrate"
+        private const val KEY_RNNOISE_RESET = "rnnoise_strength_reset"
+        private const val KEY_DOUBLE_TALK_TEST = "double_talk_test"
 
         /** The length of one audio frame; a packet holds a whole number of them. */
         private const val FRAME_MS = 10

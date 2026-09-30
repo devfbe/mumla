@@ -150,13 +150,28 @@
             android:textAppearance="?attr/textAppearanceBodySmall"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/audio_panel_mic_toggle"
-            style="?attr/materialButtonOutlinedStyle"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="end"
             android:layout_marginTop="8dp"
-            android:text="@string/mic_check_start" />
+            android:gravity="end"
+            android:orientation="horizontal">
+
+            <!-- Opens the talk-over test: a test voice on the speaker to talk over. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/audio_panel_double_talk"
+                style="?attr/borderlessButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:text="@string/double_talk_test_open" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/audio_panel_mic_toggle"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/mic_check_start" />
+        </LinearLayout>
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

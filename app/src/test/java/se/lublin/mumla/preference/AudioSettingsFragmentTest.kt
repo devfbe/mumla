@@ -21,6 +21,8 @@ import android.Manifest
 import android.app.Application
 import android.content.Context
 import android.media.AudioManager
+import androidx.preference.ListPreference
+import androidx.preference.Preference
 import androidx.preference.PreferenceManager
 import androidx.preference.SwitchPreferenceCompat
 import androidx.test.core.app.ApplicationProvider
@@ -169,5 +171,47 @@ class AudioSettingsFragmentTest {
 
         assertThat(capture.request).isNull()
         assertThat(audio.meter().message).isEqualTo(app.getString(R.string.inputLevelMeterUnavailable))
+    }
+
+    private fun AudioSettingsFragment.strength() =
+        requireNotNull(findPreference<SliderPreference>(Settings.RNNOISE_ATTENUATION_LIMIT_DB.key))
+
+    private fun AudioSettingsFragment.reset() =
+        requireNotNull(findPreference<Preference>("rnnoise_strength_reset"))
+
+    @Test
+    fun `the noise reduction strength and its reset are shown only with rnnoise`() {
+        Settings.getInstance(app).noiseSuppressionMethod = "speex"
+        val audio = openAudio()
+        assertThat(audio.strength().isVisible).isFalse()
+        assertThat(audio.reset().isVisible).isFalse()
+
+        val method = requireNotNull(audio.findPreference<ListPreference>(Settings.NOISE_SUPPRESSION_METHOD.key))
+        method.callChangeListener("rnnoise")
+
+        assertThat(audio.strength().isVisible).isTrue()
+        assertThat(audio.reset().isVisible).isTrue()
+    }
+
+    @Test
+    fun `the reset is greyed out at the default and puts a changed strength back to 18 dB`() {
+        val audio = openAudio()
+        assertThat(audio.strength().value).isEqualTo(18)
+        assertThat(audio.reset().isEnabled).isFalse()
+
+        Settings.getInstance(app).rnnoiseStrength = Settings.RNNOISE_LIMIT_UNLIMITED
+        idleMainLooper()
+        assertThat(audio.strength().value).isEqualTo(Settings.RNNOISE_LIMIT_UNLIMITED)
+        assertThat(audio.strength().formatted(audio.strength().value))
+            .isEqualTo(app.getString(R.string.rnnoise_strength_unlimited))
+        assertThat(audio.reset().isEnabled).isTrue()
+
+        audio.reset().performClick()
+        idleMainLooper()
+
+        assertThat(Settings.getInstance(app).rnnoiseStrength).isEqualTo(18)
+        assertThat(Settings.getInstance(app).rnnoiseAttenuationLimitDb).isEqualTo(18f)
+        assertThat(audio.strength().value).isEqualTo(18)
+        assertThat(audio.reset().isEnabled).isFalse()
     }
 }

@@ -62,6 +62,35 @@
         android:summary="@string/noiseSuppressionSum"
         app:iconSpaceReserved="false"/>
 
+    <!-- Strong (RNNoise) only: its attenuation limit in dB; the last position is no limit. Must
+         stay in lockstep with Settings.RNNOISE_LIMIT_*. -->
+    <se.lublin.mumla.preference.SliderPreference
+        android:key="rnnoise_attenuation_limit_db"
+        android:defaultValue="18"
+        app:min="6"
+        app:max="42"
+        app:valueStep="2"
+        app:valueFormat="@string/rnnoise_strength_value"
+        app:maxValueLabel="@string/rnnoise_strength_unlimited"
+        android:title="@string/rnnoise_strength"
+        android:summary="@string/rnnoise_strength_sum"
+        app:iconSpaceReserved="false"/>
+
+    <!-- Writes the default through Settings; enabled only while the strength differs from it. -->
+    <Preference
+        android:key="rnnoise_strength_reset"
+        android:persistent="false"
+        android:title="@string/rnnoise_strength_reset"
+        app:iconSpaceReserved="false"/>
+
+    <!-- Opens the talk-over test; takes the microphone and the speaker, so not while connected. -->
+    <Preference
+        android:key="double_talk_test"
+        android:persistent="false"
+        android:title="@string/double_talk_test"
+        android:summary="@string/double_talk_test_sum"
+        app:iconSpaceReserved="false"/>
+
     <PreferenceCategory android:title="@string/voiceActivitySettings"
         android:key="vad_settings"
         app:iconSpaceReserved="false">

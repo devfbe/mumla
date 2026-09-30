@@ -72,4 +72,6 @@
     <color name="level_meter_floor">#ff78909c</color>
     <color name="level_meter_speech">#ff039be5</color>
     <color name="level_meter_threshold">#ff2e7d32</color>
+    <!-- The talk-over test's lamp while the user would be transmitted, the meter's voice green. -->
+    <color name="talk_lamp_on">#ff43a047</color>
 </resources>

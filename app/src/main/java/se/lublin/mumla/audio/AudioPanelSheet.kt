@@ -126,6 +126,11 @@ class AudioPanelSheet : BottomSheetDialogFragment() {
         binding.audioPanelMicToggle.setOnClickListener {
             if (micCheck?.isRunning == true) stopMicCheck() else requestMicCheck()
         }
+        binding.audioPanelDoubleTalk.setOnClickListener {
+            // The talk-over test needs the microphone for itself.
+            stopMicCheck()
+            DoubleTalkTestSheet.show(parentFragmentManager)
+        }
     }
 
     override fun onPause() {
@@ -184,7 +189,7 @@ class AudioPanelSheet : BottomSheetDialogFragment() {
         binding.audioPanelMicHint.setText(if (available) R.string.mic_check_hint else R.string.mic_check_connected)
         for (view in listOf(
             binding.audioPanelMeter, binding.audioPanelTransmitState, binding.audioPanelMeterCaption,
-            binding.audioPanelMicToggle,
+            binding.audioPanelMicToggle, binding.audioPanelDoubleTalk,
         )) {
             view.isVisible = available
         }

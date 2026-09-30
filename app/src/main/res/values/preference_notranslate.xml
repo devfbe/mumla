@@ -163,4 +163,5 @@
     <string name="license_gplv3_link">https://www.gnu.org/licenses/gpl-3.0.html</string>
     <string name="license_apache2">Apache License Version 2.0</string>
     <string name="license_apache2_link">https://www.apache.org/licenses/LICENSE-2.0.html</string>
+    <string name="license_selftest_voice_link">https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD</string>
 </resources>
