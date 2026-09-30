@@ -42,6 +42,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import se.lublin.humla.audio.AudioOutput
+import se.lublin.humla.audio.Correlation
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
@@ -71,9 +72,12 @@ import kotlin.math.sqrt
  *   [SILENCE_FLOOR_DB] (a gated source returns exact zeros for silence, which alone would put any
  *   non-zero sample hundreds of dB "above silence").
  *
- * The asserted source is UNPROCESSED where the phone supports it (the raw microphone, so the
+ * The asserted source is UNPROCESSED where the phone records from it (the raw microphone, so the
  * test measures the route, not the platform's voice processing); elsewhere any source that hears
- * it. The app's own source, VOICE_COMMUNICATION, is only logged: the platform may gate it.
+ * it. UNPROCESSED is tried whatever `PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED` says: the SM-S938B
+ * does not report it, yet records from it (the raw microphone, 18 dB louder on the speaker than
+ * VOICE_RECOGNITION); a phone that cannot open it skips it. The app's own source,
+ * VOICE_COMMUNICATION, is only logged: the platform may gate it.
  *
  * Every recording is also written as a WAV to the test APK's external files directory
  * (`/sdcard/Android/data/se.lublin.humla.test/files/loopback`), and every number goes to logcat
@@ -217,10 +221,7 @@ class AcousticLoopbackDeviceTest {
 
     /** Silence, then the probe, recorded as the app records and as the raw microphone; see [isHeard]. */
     private fun probeOnCurrentRoute(type: Int, label: String) {
-        val sources = SOURCES.filter { (source, _) ->
-            source != MediaRecorder.AudioSource.UNPROCESSED || unprocessedSupported
-        }
-        val results = sources.mapNotNull { (source, sourceName) ->
+        val results = SOURCES.mapNotNull { (source, sourceName) ->
             // The app's source must record; another one this phone cannot open is skipped.
             val optional = source != MediaRecorder.AudioSource.VOICE_COMMUNICATION
             val silent = loopback(FloatArray(probe.size), source, "$label-$sourceName-silence")
@@ -245,11 +246,9 @@ class AcousticLoopbackDeviceTest {
                 .that(heard.routedType).isEqualTo(type)
             Triple(sourceName, heard, silent)
         }
-        val asserted = if (unprocessedSupported) {
-            checkNotNull(results.firstOrNull { it.first == "UNPROCESSED" }) { "$label: UNPROCESSED did not record" }
-        } else {
-            results.firstOrNull { isHeard(it.second, it.third) } ?: results.first()
-        }
+        val asserted = results.firstOrNull { it.first == "UNPROCESSED" }
+            ?: results.firstOrNull { isHeard(it.second, it.third) }
+            ?: results.first()
         val (sourceName, heard, silent) = asserted
         assertWithMessage("%s, %s: matched-filter peak over correlation noise (dB)", label, sourceName)
             .that(heard.peakDb).isAtLeast(MIN_PEAK_DB)
@@ -396,7 +395,7 @@ class AcousticLoopbackDeviceTest {
     private fun analyze(capture: Capture): Loopback {
         val recorded = capture.recorded
         val x = DoubleArray(recorded.size) { recorded[it] / FULL_SCALE }
-        val correlation = crossCorrelate(x, sweep)
+        val correlation = Correlation.crossCorrelate(x, sweep)
         var peakLag = 0
         for (lag in correlation.indices) if (abs(correlation[lag]) > abs(correlation[peakLag])) peakLag = lag
         val peak = abs(correlation[peakLag])
@@ -551,73 +550,6 @@ class AcousticLoopbackDeviceTest {
             val end = minOf(to, x.size)
             for (i in from until end) sum += x[i] * x[i]
             return sum / max(1, end - from)
-        }
-
-        /**
-         * The cross-correlation of [x] with [h] (sum over i of x(lag + i) h(i)) at every lag where
-         * [h] fits, by FFT.
-         */
-        fun crossCorrelate(x: DoubleArray, h: DoubleArray): DoubleArray {
-            var n = 1
-            while (n < x.size + h.size) n *= 2
-            val xr = x.copyOf(n)
-            val xi = DoubleArray(n)
-            val hr = h.copyOf(n)
-            val hi = DoubleArray(n)
-            fft(xr, xi, inverse = false)
-            fft(hr, hi, inverse = false)
-            for (i in 0 until n) { // X * conj(H)
-                val re = xr[i] * hr[i] + xi[i] * hi[i]
-                val im = xi[i] * hr[i] - xr[i] * hi[i]
-                xr[i] = re
-                xi[i] = im
-            }
-            fft(xr, xi, inverse = true)
-            return DoubleArray(x.size - h.size + 1) { xr[it] / n }
-        }
-
-        /** In-place iterative radix-2 FFT; the inverse is unscaled. */
-        fun fft(re: DoubleArray, im: DoubleArray, inverse: Boolean) {
-            val n = re.size
-            var j = 0
-            for (i in 1 until n) {
-                var bit = n shr 1
-                while (j and bit != 0) {
-                    j = j xor bit
-                    bit = bit shr 1
-                }
-                j = j xor bit
-                if (i < j) {
-                    re[i] = re[j].also { re[j] = re[i] }
-                    im[i] = im[j].also { im[j] = im[i] }
-                }
-            }
-            var len = 2
-            while (len <= n) {
-                val angle = 2 * PI / len * if (inverse) 1 else -1
-                val wr = cos(angle)
-                val wi = sin(angle)
-                var start = 0
-                while (start < n) {
-                    var cr = 1.0
-                    var ci = 0.0
-                    for (k in 0 until len / 2) {
-                        val a = start + k
-                        val b = a + len / 2
-                        val tr = re[b] * cr - im[b] * ci
-                        val ti = re[b] * ci + im[b] * cr
-                        re[b] = re[a] - tr
-                        im[b] = im[a] - ti
-                        re[a] += tr
-                        im[a] += ti
-                        val next = cr * wr - ci * wi
-                        ci = cr * wi + ci * wr
-                        cr = next
-                    }
-                    start += len
-                }
-                len = len shl 1
-            }
         }
     }
 }
