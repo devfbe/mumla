@@ -36,7 +36,7 @@ class AudioHandlerTest {
         NoopOutputListener,
     )
 
-    private fun create(config: AudioConfig) = DefaultAudioHandlerFactory.create(host, config, params)
+    private fun create(config: AudioConfig) = DefaultAudioHandlerFactory.create(host, config, params) {}
 
     @Test
     fun withoutTheRecordAudioPermissionCreationFailsWithAnAudioException() {

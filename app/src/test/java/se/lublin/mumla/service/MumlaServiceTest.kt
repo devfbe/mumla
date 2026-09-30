@@ -68,8 +68,10 @@ class MumlaServiceTest {
     private lateinit var overlay: MumlaOverlay
     private lateinit var hotCorner: MumlaHotCorner
     private val route = MutableStateFlow<Int?>(null)
+    private val captureSilenced = MutableStateFlow(false)
     private val session: IHumlaSession = mockk(relaxed = true) {
         every { audio.route } returns route
+        every { audio.captureSilenced } returns captureSilenced
         every { audio.transmitMode } returns TransmitMode.VOICE_ACTIVITY
         every { targetServer } returns Server(1, "Home", "example.org", 64738, "me", null)
     }

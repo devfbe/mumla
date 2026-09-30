@@ -27,6 +27,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import se.lublin.humla.audio.AudioController
 import se.lublin.humla.audio.TransmitMode
+import se.lublin.humla.audio.capture.CaptureState
 import se.lublin.humla.audio.capture.VadConfig
 import se.lublin.humla.audio.routing.AudioDeviceCategory
 import se.lublin.humla.exception.AudioInitializationException
@@ -38,6 +39,7 @@ import se.lublin.humla.testutil.FAKE_BANDWIDTH
 import se.lublin.humla.testutil.Harnesses
 import se.lublin.humla.testutil.HumlaSessionHarness
 import se.lublin.humla.testutil.awaitUntil
+import se.lublin.humla.testutil.connectionError
 import se.lublin.humla.util.MumbleVersion
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
@@ -227,6 +229,30 @@ class HumlaSessionAudioTest {
 
         awaitUntil(description = "pipeline stopped") { h.audioFactory.created[0].shutdownCalls.get() == 1 }
         assertThat(h.session.audio.currentBandwidth).isEqualTo(-1)
+    }
+
+    /**
+     * A microphone the platform silences transmits nothing, so the session says so; it no longer
+     * does once the platform lets it be heard again, or once the pipeline is gone.
+     */
+    @Test
+    fun theSessionPublishesWhileThePlatformSilencesItsMicrophone() {
+        val h = start()
+        h.connectAndSynchronize()
+        audioUp(h)
+        val audio = h.audioFactory.created[0]
+        assertThat(h.session.audio.captureSilenced.value).isFalse()
+
+        audio.reportCapture(CaptureState.Silenced)
+        h.drainUntil("silenced published") { h.session.audio.captureSilenced.value }
+
+        audio.reportCapture(CaptureState.Active)
+        h.drainUntil("audible again published") { !h.session.audio.captureSilenced.value }
+
+        audio.reportCapture(CaptureState.Silenced)
+        h.drainUntil("silenced again") { h.session.audio.captureSilenced.value }
+        h.failConnection(0, connectionError())
+        h.drainUntil("a pipeline that is gone is not silenced") { !h.session.audio.captureSilenced.value }
     }
 
     /**

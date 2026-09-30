@@ -68,6 +68,11 @@ internal class AudioSession(
     /** The `AudioDeviceInfo` type voice is routed to; null while the platform decides. */
     val route: StateFlow<Int?> = mutableRoute.asStateFlow()
 
+    private val mutableCaptureSilenced = MutableStateFlow(false)
+
+    /** Whether the platform silences the running pipeline's microphone. */
+    val captureSilenced: StateFlow<Boolean> = mutableCaptureSilenced.asStateFlow()
+
     val config: AudioConfig get() = settings.toAudioConfig(mutableRoute.value)
 
     private val toggleInputMode = ToggleInputMode()
@@ -92,7 +97,9 @@ internal class AudioSession(
     }
 
     /** One controller and one thread for the life of this object; [release] quits it. */
-    val controller = AudioController(host, factory, listener::onAudioFailed, mainHandler)
+    val controller = AudioController(host, factory, listener::onAudioFailed, mainHandler) {
+        mutableCaptureSilenced.value = it
+    }
 
     val isTalking: Boolean get() = toggleInputMode.isTalkingOn
 

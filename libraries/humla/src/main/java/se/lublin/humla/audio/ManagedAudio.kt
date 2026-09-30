@@ -18,6 +18,7 @@
 package se.lublin.humla.audio
 
 import android.content.Context
+import se.lublin.humla.audio.capture.CaptureState
 import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.model.UserState
 import se.lublin.humla.net.HumlaUDPMessageType
@@ -60,17 +61,26 @@ internal class AudioHost(
 )
 
 internal interface AudioHandlerFactory {
+    /**
+     * @param onCaptureState what the pipeline's capture reports: silenced by the platform, audible
+     *   again, or failed. Called on the capture thread or a platform binder thread.
+     */
     fun create(
         host: AudioHost,
         config: AudioConfig,
         params: AudioSessionParams,
+        onCaptureState: (CaptureState) -> Unit,
     ): ManagedAudio
 }
 
 /** Builds and starts the real [AudioHandler]. */
 internal object DefaultAudioHandlerFactory : AudioHandlerFactory {
-    override fun create(host: AudioHost, config: AudioConfig, params: AudioSessionParams): ManagedAudio =
-        AudioHandlerAdapter(AudioHandler(host, config, params).apply { start() })
+    override fun create(
+        host: AudioHost,
+        config: AudioConfig,
+        params: AudioSessionParams,
+        onCaptureState: (CaptureState) -> Unit,
+    ): ManagedAudio = AudioHandlerAdapter(AudioHandler(host, config, params, onCaptureState).apply { start() })
 }
 
 /** Dresses an [AudioHandler] as a [ManagedAudio]. */

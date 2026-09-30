@@ -11,6 +11,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import se.lublin.humla.audio.capture.CaptureState
 import se.lublin.humla.audio.inputmode.ContinuousInputMode
 import se.lublin.humla.exception.AudioInitializationException
 import se.lublin.humla.model.UserState
@@ -63,6 +64,7 @@ class AudioControllerTest {
     private val factory = FakeAudioFactory()
     private val registry = FakeRegistry()
     private val listener = RecordingListener()
+    private val silencedReports = CopyOnWriteArrayList<Boolean>()
     private val context = RuntimeEnvironment.getApplication()
     private val controller = newController()
     private val params = AudioSessionParams(
@@ -71,6 +73,7 @@ class AudioControllerTest {
 
     private fun newController(mainHandler: Handler = Handler(Looper.getMainLooper())) = AudioController(
         AudioHost(context, SilentLogger, NoopEncodeListener, NoopOutputListener), factory, listener, mainHandler,
+        onCaptureSilenced = { silencedReports += it },
     )
 
     @After
@@ -321,6 +324,92 @@ class AudioControllerTest {
         assertThat(audio.shutdownCalls.get()).isEqualTo(1)
         assertThat(registry.tcp).isEmpty()
         assertThat(registry.udp).isEmpty()
+    }
+
+    // --- what the running pipeline's capture reports --------------------------------------------
+
+    /** The platform's reports arrive on a binder thread; the owner hears each change once, on main. */
+    @Test
+    fun silencingAndReleasingTheMicrophoneReachMainOncePerChange() {
+        val audio = startAndAwaitRunning()
+
+        audio.reportCapture(CaptureState.Silenced)
+        idleMainWhenSomethingIsPosted()
+        audio.reportCapture(CaptureState.Silenced)
+        idleControlThread()
+        mainLooper.idle()
+        assertThat(silencedReports).containsExactly(true)
+
+        audio.reportCapture(CaptureState.Active)
+        idleMainWhenSomethingIsPosted()
+        assertThat(silencedReports).containsExactly(true, false).inOrder()
+    }
+
+    @Test
+    fun aSilencedPipelineThatIsTornDownIsNoLongerSilenced() {
+        val audio = startAndAwaitRunning()
+        audio.reportCapture(CaptureState.Silenced)
+        idleMainWhenSomethingIsPosted()
+
+        controller.shutdown()
+
+        idleMainWhenSomethingIsPosted()
+        assertThat(silencedReports).containsExactly(true, false).inOrder()
+    }
+
+    /** A torn-down pipeline unregisters its listener only after the join, so a late report can come. */
+    @Test
+    fun aLateReportFromAReplacedPipelineIsIgnored() {
+        val first = startAndAwaitRunning()
+        controller.reconfigure(AudioConfig(PipelineSettings(amplitudeBoost = 2f)), ContinuousInputMode())
+        awaitUntil(description = "second pipeline") { factory.created.size == 2 }
+
+        first.reportCapture(CaptureState.Silenced)
+        first.reportCapture(CaptureState.Error("capture read error -3"))
+
+        idleControlThread()
+        mainLooper.idle()
+        assertThat(silencedReports).isEmpty()
+        assertThat(listener.failures).isEmpty()
+        assertThat(factory.created).hasSize(2)
+    }
+
+    /** A capture that fails is rebuilt once; the second failure is the user's to hear about. */
+    @Test
+    fun aCaptureErrorRebuildsThePipelineOnceAndThenReportsTheFailure() {
+        val first = startAndAwaitRunning()
+
+        first.reportCapture(CaptureState.Error("capture could not be started"))
+
+        awaitUntil(description = "rebuilt pipeline") { factory.created.size == 2 && controller.isRunning }
+        idleControlThread()
+        assertThat(first.shutdownCalls.get()).isEqualTo(1)
+        assertThat(registry.tcp).containsExactly(factory.created[1].tcpHandler)
+        assertThat(factory.sessionParams[1]).isEqualTo(factory.sessionParams[0])
+        mainLooper.idle()
+        assertThat(listener.failures).isEmpty()
+
+        factory.created[1].reportCapture(CaptureState.Error("capture read error -3"))
+
+        idleMainWhenSomethingIsPosted()
+        assertThat(listener.failures).containsExactly("capture read error -3")
+        assertThat(factory.created).hasSize(2)
+    }
+
+    /** The rebuild budget belongs to one synchronized session, so the next one gets its own. */
+    @Test
+    fun aNewStartGetsItsOwnRebuild() {
+        startAndAwaitRunning().reportCapture(CaptureState.Error("first"))
+        awaitUntil(description = "rebuilt pipeline") { factory.created.size == 2 }
+
+        controller.start(AudioConfig(), params, registry)
+        awaitUntil(description = "pipeline of the new start") { factory.created.size == 3 }
+        idleControlThread()
+        factory.created[2].reportCapture(CaptureState.Error("second session"))
+
+        awaitUntil(description = "rebuilt again") { factory.created.size == 4 }
+        mainLooper.idle()
+        assertThat(listener.failures).isEmpty()
     }
 
 }

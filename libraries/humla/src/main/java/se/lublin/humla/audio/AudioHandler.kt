@@ -22,8 +22,12 @@ import android.content.pm.PackageManager
 import android.media.AudioManager
 import com.google.protobuf.MessageLite
 import se.lublin.humla.R
+import se.lublin.humla.audio.capture.AndroidAudioRecordSource
 import se.lublin.humla.audio.capture.AudioSourcePolicy
 import se.lublin.humla.audio.capture.CapturePipeline
+import se.lublin.humla.audio.capture.CaptureRequest
+import se.lublin.humla.audio.capture.CaptureState
+import se.lublin.humla.audio.capture.PcmCaptureSourceFactory
 import se.lublin.humla.audio.encoder.IEncoder
 import se.lublin.humla.audio.encoder.OpusEncoder
 import se.lublin.humla.exception.AudioException
@@ -44,12 +48,17 @@ import se.lublin.humla.util.HumlaLogger
  *
  * @param params `self` carries the session id stamped on every voice packet, so a wrong one means
  *   sending as somebody else.
+ * @param onCaptureState what the capture reports: [CaptureState.Silenced] and [CaptureState.Active]
+ *   on a platform binder thread, [CaptureState.Error] on the capture thread.
+ * @param captureFactory opens the microphone; tests replace it.
  * @throws AudioInitializationException without the RECORD_AUDIO permission.
  */
 internal class AudioHandler(
     host: AudioHost,
     config: AudioConfig,
     private val params: AudioSessionParams,
+    onCaptureState: (CaptureState) -> Unit = {},
+    captureFactory: PcmCaptureSourceFactory = AndroidAudioRecordSource.Factory(),
 ) : TcpMessageHandler, VoicePacketHandler {
 
     private val context: Context = host.context
@@ -91,7 +100,8 @@ internal class AudioHandler(
         // The listener is the transmitter below; AudioInput only calls it once recording starts.
         input = AudioInput(
             { frame, size -> transmitter.onAudioInputReceived(frame, size) },
-            audioSource, settings.inputSampleRate, echo, effects,
+            captureFactory.open(CaptureRequest(audioSource, settings.inputSampleRate, effects, echo)),
+            onCaptureState,
         )
         // Both ends of the canceller come from one call: the chain goes to the capture thread, the
         // far-end tap to AudioOutput's playback thread, which must feed the reference for AEC to work.

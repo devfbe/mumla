@@ -650,6 +650,8 @@ public class HumlaSession internal constructor(
         override fun selectAutomaticDevice() = audioSession.router.forgetChoice()
 
         override val currentBandwidth: Int get() = audioSession.currentBandwidth
+
+        override val captureSilenced: StateFlow<Boolean> get() = audioSession.captureSilenced
     }
 
     /**

@@ -37,12 +37,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.audio.TransmitMode
@@ -87,6 +89,9 @@ class MumlaService :
     private lateinit var messageNotification: MumlaMessageNotification
     private lateinit var reconnectPrompt: MumlaReconnectNotification
     private var reconnectPromptShown = false
+
+    /** Whether Android silences the followed session's microphone; it then transmits nothing. */
+    private var microphoneBlocked = false
 
     /** Headset / AVRCP media buttons while connected. */
     @VisibleForTesting
@@ -173,6 +178,9 @@ class MumlaService :
         collectEvents(this, session) { onEvent(session, it) }
         launch(start = CoroutineStart.UNDISPATCHED) { session.audio.route.drop(1).collect(::applyAudioRoute) }
         launch(start = CoroutineStart.UNDISPATCHED) {
+            session.audio.captureSilenced.onEach { silenced -> onMicrophoneBlocked(session, silenced) }.collect()
+        }
+        launch(start = CoroutineStart.UNDISPATCHED) {
             session.state.map { it == SessionState.Connected }.distinctUntilChanged().collectLatest { connected ->
                 // Changes only: the state found at synchronization is the one onSynchronized restores.
                 if (connected) {
@@ -255,7 +263,11 @@ class MumlaService :
                 val self = SelfSummary.of(session.model.value)
                 notification.muted = self?.isSelfMuted == true
                 notification.deafened = self?.isSelfDeafened == true
-                val text = self?.text(this) ?: getString(R.string.connected)
+                val text = if (microphoneBlocked) {
+                    getString(R.string.microphone_blocked)
+                } else {
+                    self?.text(this) ?: getString(R.string.connected)
+                }
                 showConnectionNotification(text + torSuffix(), actions = true)
             }
             is SessionState.ConnectionLost, is SessionState.Reconnecting ->
@@ -317,6 +329,18 @@ class MumlaService :
     }
 
     private fun onSelfMuteChanged(muted: Boolean, deafened: Boolean) = settings.setMutedAndDeafened(muted, deafened)
+
+    /**
+     * Android silenced the microphone (another app took it, the privacy toggle, or a start from the
+     * background without while-in-use access) or let it be heard again. The notification says so
+     * while it lasts, the chat once; the platform lifts it when the app comes to the foreground.
+     */
+    private fun onMicrophoneBlocked(session: IHumlaSession, blocked: Boolean) {
+        if (blocked == microphoneBlocked) return
+        microphoneBlocked = blocked
+        if (blocked) sessions.chat.warnOnce(getString(R.string.microphone_blocked))
+        if (session.state.value == SessionState.Connected) renderSessionState(session, SessionState.Connected)
+    }
 
     private fun onTextMessage(session: IHumlaSession, message: Message) {
         val strippedMessage = HtmlUtils.toPlainText(message.message)

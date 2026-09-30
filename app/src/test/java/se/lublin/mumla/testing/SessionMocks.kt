@@ -38,7 +38,10 @@ private val actionMocks = WeakHashMap<IHumlaSession, SessionActions>()
 
 /** The mocked session's audio controls, as a mock of their own so their calls can be counted. */
 fun IHumlaSession.stubAudio(): AudioControls =
-    audioMocks.getOrPut(this) { mockk<AudioControls>(relaxed = true).also { every { audio } returns it } }
+    audioMocks.getOrPut(this) {
+        mockk<AudioControls>(relaxed = true).also { every { audio } returns it }
+            .also { every { it.captureSilenced } returns MutableStateFlow(false) }
+    }
 
 /** The mocked session's actions, as a mock of their own so their calls can be counted. */
 fun IHumlaSession.stubActions(): SessionActions =

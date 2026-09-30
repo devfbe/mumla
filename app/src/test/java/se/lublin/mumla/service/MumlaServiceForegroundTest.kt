@@ -17,6 +17,7 @@ import se.lublin.humla.session.ConnectionConfig
 import se.lublin.humla.session.SessionConfig
 import se.lublin.humla.session.SessionState
 import se.lublin.humla.testutil.ScriptedConnections
+import se.lublin.humla.testutil.awaitUntil
 import se.lublin.mumla.R
 import se.lublin.mumla.app.AppContainer
 import se.lublin.mumla.app.MumlaApplication
@@ -89,6 +90,12 @@ class MumlaServiceForegroundTest {
 
     private fun log() = sessions.chat.messages.value.map { it.body }
 
+    /** Drains the main looper until [condition] holds; for what the audio thread posts to it. */
+    private fun drainUntil(description: String, condition: () -> Boolean) = awaitUntil(description = description) {
+        mainLooper.idle()
+        condition()
+    }
+
     private fun pressCancelReconnect() {
         shadowOf(notificationManager).getNotification(1)!!.actions
             .single { it.title.toString() == app.getString(R.string.cancel_reconnect) }
@@ -143,6 +150,34 @@ class MumlaServiceForegroundTest {
         assertThat(foregroundActions()).doesNotContain(app.getString(R.string.cancel_reconnect))
         assertThat(log()).doesNotContain(app.getString(R.string.foreground_start_failed))
         assertThat(reconnectPrompt()).isNull()
+    }
+
+    /**
+     * Android can still silence the microphone of a session in the foreground (another app takes
+     * it, the privacy toggle, a background start without while-in-use access); it then reads
+     * zeros and nothing is transmitted. The notification says so while it lasts, the chat once.
+     */
+    @Test
+    fun aMicrophoneSilencedByAndroidIsReportedUntilItIsHeardAgain() {
+        synchronize()
+        drainUntil("the pipeline") { server.pipelinesBuilt == 1 }
+        val connectedText = foregroundText()
+        val blocked = app.getString(R.string.microphone_blocked)
+
+        server.silenceCapture(true)
+
+        drainUntil("the notification says the microphone is blocked") { foregroundText() == blocked }
+        assertThat(log()).contains(blocked)
+        assertThat(shadowOf(service).isForegroundStopped).isFalse()
+
+        server.silenceCapture(false)
+        drainUntil("the notification is back to the connected text") { foregroundText() == connectedText }
+        server.silenceCapture(true)
+        drainUntil("blocked again") { foregroundText() == blocked }
+        server.silenceCapture(false)
+        drainUntil("audible again") { foregroundText() == connectedText }
+
+        assertThat(log().count { it == blocked }).isEqualTo(1)
     }
 
     @Test

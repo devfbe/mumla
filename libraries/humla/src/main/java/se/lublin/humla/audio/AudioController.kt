@@ -20,6 +20,7 @@ package se.lublin.humla.audio
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import se.lublin.humla.audio.capture.CaptureState
 import se.lublin.humla.audio.capture.IInputMode
 import se.lublin.humla.net.MessageHandlerRegistry
 import se.lublin.humla.util.HumlaLog
@@ -29,7 +30,9 @@ import se.lublin.humla.util.HumlaLog
  *
  * Every public method posts and returns; creation and teardown (which joins the capture and
  * playback threads) run on the control thread. [onFailed] is posted to [mainHandler], with the
- * message of a pipeline that could not be built.
+ * message of a pipeline that could not be built or whose capture failed again after its rebuild.
+ * What the running pipeline's capture reports is handled on the control thread: silencing goes to
+ * [onCaptureSilenced], a capture error rebuilds the pipeline once per [start].
  * [session] is confined to the control thread; [running] is volatile because [isRunning] and
  * [currentBandwidth] may be read from any thread.
  */
@@ -38,6 +41,8 @@ internal class AudioController(
     private val factory: AudioHandlerFactory,
     private val onFailed: (String) -> Unit,
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
+    /** Whether the platform silences the running pipeline's capture; posted to [mainHandler]. */
+    private val onCaptureSilenced: (Boolean) -> Unit = {},
 ) {
     /** What a pipeline would be built from right now. */
     private class Session(
@@ -48,9 +53,11 @@ internal class AudioController(
 
     /**
      * A pipeline that is up, with the registry its handlers were added to, so teardown unregisters
-     * from that registry whatever [session] has become since.
+     * from that registry whatever [session] has become since. [generation] tells its capture
+     * reports from those of a pipeline torn down before it: that one unregisters its platform
+     * listener only after the capture thread is joined, so a report can still arrive late.
      */
-    private class Running(val audio: ManagedAudio, val registry: MessageHandlerRegistry)
+    private class Running(val audio: ManagedAudio, val registry: MessageHandlerRegistry, val generation: Any)
 
     /** Not private so tests can assert on the thread. Started eagerly; lives until [quit]. */
     internal val thread = HandlerThread(THREAD_NAME).apply { start() }
@@ -61,6 +68,12 @@ internal class AudioController(
 
     private var session: Session? = null
     @Volatile private var running: Running? = null
+
+    /** Whether a capture error already cost this session's [start] its one rebuild. Control thread. */
+    private var rebuiltAfterCaptureError = false
+
+    /** What [onCaptureSilenced] was last told. Control thread. */
+    private var silenced = false
 
     val isRunning: Boolean get() = running != null
 
@@ -73,6 +86,7 @@ internal class AudioController(
             stopRunning()
             val next = Session(config, params, registry)
             session = next
+            rebuiltAfterCaptureError = false
             create(next)
         }
     }
@@ -123,11 +137,15 @@ internal class AudioController(
     }
 
     private fun create(s: Session) {
+        val generation = Any()
         try {
-            val audio = factory.create(host, s.config, s.params)
+            val audio = factory.create(host, s.config, s.params) { state ->
+                // From the capture thread or a binder thread; after quit() the post is dropped.
+                handler.post { onCaptureState(generation, state) }
+            }
             s.registry.addTcpHandler(audio.tcpHandler)
             s.registry.addVoiceHandler(audio.voiceHandler)
-            running = Running(audio, s.registry)
+            running = Running(audio, s.registry, generation)
         } catch (e: Exception) {
             // Exception, not AudioException: AudioTrack/AudioRecord construction can throw
             // unchecked, which would kill the control thread and silently drop all later messages.
@@ -142,6 +160,40 @@ internal class AudioController(
         r.registry.removeTcpHandler(r.audio.tcpHandler)
         r.registry.removeVoiceHandler(r.audio.voiceHandler)
         r.audio.shutdown()
+        // A pipeline that is gone is not silenced; the next one reports its own state.
+        reportSilenced(false)
+    }
+
+    private fun onCaptureState(generation: Any, state: CaptureState) {
+        if (running?.generation !== generation) return
+        when (state) {
+            CaptureState.Silenced -> reportSilenced(true)
+            CaptureState.Active -> reportSilenced(false)
+            is CaptureState.Error -> onCaptureError(state.message)
+        }
+    }
+
+    /**
+     * The capture thread has ended. One rebuild from the same session, then the failure is the
+     * user's to hear about.
+     */
+    private fun onCaptureError(message: String) {
+        val s = session ?: return
+        if (rebuiltAfterCaptureError) {
+            HumlaLog.e(TAG, "Capture failed again after its rebuild: $message")
+            mainHandler.post { onFailed(message) }
+            return
+        }
+        HumlaLog.w(TAG, "Capture failed, rebuilding the pipeline once: $message")
+        rebuiltAfterCaptureError = true
+        stopRunning()
+        create(s)
+    }
+
+    private fun reportSilenced(value: Boolean) {
+        if (silenced == value) return
+        silenced = value
+        mainHandler.post { onCaptureSilenced(value) }
     }
 
     companion object {

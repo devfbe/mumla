@@ -79,8 +79,9 @@ public data class MeterReading(
  * One bare thread, released by [stop]. Not reusable: [start] twice throws.
  *
  * While a call is running this takes the microphone from its session: on API 31+ the newer client
- * wins, the session's capture reports `CaptureState.Silenced`, and its retry re-opens capture once
- * this preview has stopped.
+ * wins and the session's capture reports `CaptureState.Silenced` (published as the session's
+ * `captureSilenced`). Nothing re-opens it: the platform lets the session's recorder be heard again
+ * once this preview has stopped.
  */
 @Suppress("LongParameterList") // The settings a session captures with, and the platform seams.
 public class CapturePreview internal constructor(

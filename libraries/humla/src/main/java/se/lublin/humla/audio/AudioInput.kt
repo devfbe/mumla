@@ -17,14 +17,8 @@
 
 package se.lublin.humla.audio
 
-import android.Manifest
 import android.os.Process
-import androidx.annotation.RequiresPermission
-import se.lublin.humla.audio.capture.AndroidAudioEffects
-import se.lublin.humla.audio.capture.AndroidAudioRecordSource
-import se.lublin.humla.audio.capture.CaptureRequest
 import se.lublin.humla.audio.capture.CaptureState
-import se.lublin.humla.audio.capture.EchoCancellationMode
 import se.lublin.humla.audio.capture.PcmCaptureSource
 import se.lublin.humla.util.HumlaLog
 
@@ -41,26 +35,6 @@ internal class AudioInput(
     private val stateListener: ((CaptureState) -> Unit)? = null,
     private val joinTimeoutMs: Long = DEFAULT_JOIN_TIMEOUT_MS,
 ) {
-    /** Opens an [AndroidAudioRecordSource] for [audioSource] at [targetSampleRate]. */
-    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    constructor(
-        listener: AudioInputListener,
-        audioSource: Int,
-        targetSampleRate: Int,
-        echo: EchoCancellationMode,
-        effects: AndroidAudioEffects = AndroidAudioEffects(),
-    ) : this(
-        listener,
-        AndroidAudioRecordSource.Factory().open(
-            CaptureRequest(
-                audioSource = audioSource,
-                targetSampleRate = targetSampleRate,
-                effects = effects,
-                echo = echo,
-            ),
-        ),
-    )
-
     fun interface AudioInputListener {
         /**
          * @param frame the **reused** capture buffer: valid until this call returns, never kept.

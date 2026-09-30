@@ -64,4 +64,12 @@ public interface AudioControls {
 
     /** The bandwidth in bps of the audio sent now, or a negative value while none is sent. */
     public val currentBandwidth: Int
+
+    /**
+     * True while Android silences the microphone of the running pipeline: another app took it, the
+     * privacy toggle is on, or the app records from the background without its microphone
+     * foreground service. Capture then reads silence, so nothing is transmitted. False while no
+     * pipeline runs.
+     */
+    public val captureSilenced: StateFlow<Boolean>
 }

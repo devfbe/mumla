@@ -25,6 +25,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import se.lublin.humla.HumlaSession
 import se.lublin.humla.IHumlaSession
+import se.lublin.humla.audio.capture.CaptureState
 import se.lublin.humla.exception.HumlaException
 import se.lublin.humla.net.CryptState
 import se.lublin.humla.net.HumlaConnection
@@ -52,6 +53,7 @@ public class ScriptedConnections(reconnectBaseDelayMillis: Long, reconnectAttemp
         maxJitterFraction = 0.0,
     )
     private val transports = CopyOnWriteArrayList<ScriptedTcp>()
+    private val audioFactories = CopyOnWriteArrayList<FakeAudioFactory>()
 
     /** Connection attempts so far. */
     public val attempts: Int get() = transports.size
@@ -69,9 +71,21 @@ public class ScriptedConnections(reconnectBaseDelayMillis: Long, reconnectAttemp
             connectionFactory = { params, listener ->
                 HumlaConnection(params, listener, main::post, Dispatchers.Unconfined, Transports())
             },
-            audioFactory = FakeAudioFactory(),
+            audioFactory = FakeAudioFactory().also { audioFactories += it },
             reconnectPolicy = policy,
         )
+    }
+
+    /** How many audio pipelines the latest session has built so far; they are built on its audio thread. */
+    public val pipelinesBuilt: Int get() = audioFactories.lastOrNull()?.created?.size ?: 0
+
+    /**
+     * The platform silences the microphone of the latest session's newest pipeline, or lets it be
+     * heard again. The session learns it on its audio thread and publishes it on the main looper.
+     */
+    public fun silenceCapture(silenced: Boolean) {
+        val audio = checkNotNull(audioFactories.lastOrNull()?.created?.lastOrNull()) { "no audio pipeline built yet" }
+        audio.reportCapture(if (silenced) CaptureState.Silenced else CaptureState.Active)
     }
 
     /** The server of the latest attempt accepts it: TLS, the own user, ServerSync. */

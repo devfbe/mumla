@@ -22,6 +22,7 @@ import se.lublin.humla.audio.AudioHandlerFactory
 import se.lublin.humla.audio.AudioHost
 import se.lublin.humla.audio.AudioSessionParams
 import se.lublin.humla.audio.ManagedAudio
+import se.lublin.humla.audio.capture.CaptureState
 import se.lublin.humla.net.TcpMessageHandler
 import se.lublin.humla.net.VoicePacketHandler
 import java.util.concurrent.CopyOnWriteArrayList
@@ -34,8 +35,11 @@ internal const val FAKE_BANDWIDTH = 12_345
 /** How long [FakeAudio.shutdown] waits at most for its gate. */
 internal const val GATE_TIMEOUT_SECONDS = 5L
 
-/** A pipeline that opens no device; shared by the service tests. */
-internal class FakeAudio : ManagedAudio {
+/**
+ * A pipeline that opens no device; shared by the service tests. [reportCapture] plays its capture:
+ * the platform silencing it, or capture failing.
+ */
+internal class FakeAudio(private val onCaptureState: (CaptureState) -> Unit = {}) : ManagedAudio {
     val shutdownCalls = AtomicInteger()
     @Volatile var shutdownThread: String? = null
 
@@ -51,6 +55,9 @@ internal class FakeAudio : ManagedAudio {
     override val voiceHandler = VoicePacketHandler { }
     override val currentBandwidth: Int = FAKE_BANDWIDTH
     override fun setVoiceTargetId(id: Byte) { targetIds += id }
+
+    /** Reports [state] as the real capture does, from whichever thread calls this. */
+    fun reportCapture(state: CaptureState) = onCaptureState(state)
 
     override fun shutdown() {
         shutdownThread = Thread.currentThread().name
@@ -71,12 +78,13 @@ internal class FakeAudioFactory : AudioHandlerFactory {
         host: AudioHost,
         config: AudioConfig,
         params: AudioSessionParams,
+        onCaptureState: (CaptureState) -> Unit,
     ): ManagedAudio {
         createThreads += Thread.currentThread().name
         configs += config
         sessionParams += params
         hosts += host
         failWith?.let { throw it }
-        return FakeAudio().also { created += it }
+        return FakeAudio(onCaptureState).also { created += it }
     }
 }
