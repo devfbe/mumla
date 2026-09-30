@@ -62,6 +62,15 @@ kotlin {
     explicitApi()
 }
 
+// Speech clips (tools/speech-corpus) for the tests only: assets of the instrumented test APK and
+// resources of the JVM tests, never part of the library or an app built on it.
+androidComponents {
+    onVariants { variant ->
+        variant.deviceTests.values.forEach { it.sources.assets?.addStaticSourceDirectory("src/testSpeech") }
+        variant.hostTests.values.forEach { it.sources.resources?.addStaticSourceDirectory("src/testSpeech") }
+    }
+}
+
 // humla-protocol is the platform-free half of this library, not a separate API: its internal
 // declarations are visible here as if they were this module's own.
 val protocol = project(":libraries:humla-protocol")

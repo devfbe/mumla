@@ -85,6 +85,42 @@
           ${shellHook}
           exec ${androidStudio}/bin/android-studio "$@"
         '';
+
+        # Piper voices for the device tests' speech corpus (tools/speech-corpus/generate.sh), pinned
+        # by hash. Far end: two male voices; near end: two female voices.
+        piperVoice = path: onnxHash: jsonHash:
+          let
+            name = builtins.baseNameOf path;
+            url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/${path}";
+          in [
+            { name = "${name}.onnx"; path = pkgs.fetchurl { url = "${url}.onnx"; hash = onnxHash; }; }
+            { name = "${name}.onnx.json"; path = pkgs.fetchurl { url = "${url}.onnx.json"; hash = jsonHash; }; }
+          ];
+        piperVoices = pkgs.linkFarm "mumla-piper-voices" (
+          piperVoice "de/de_DE/thorsten/medium/de_DE-thorsten-medium"
+            "sha256-fmR2LY5RGLtXjy7qYgfho1qODDBZUBC2ZvmD/Ie7eBk="
+            "sha256-l0re55BTOtsnOhrIj0kCfSobjw8s9JBZVKR5HnkmToU="
+          ++ piperVoice "en/en_US/ryan/medium/en_US-ryan-medium"
+            "sha256-q/TCdIYlZO1ke6DSxH+O58m3F9J72tkhkQDrMQ20BHo="
+            "sha256-RANMBWyxVoGyrUlDB8fz8uRJnRJTxwDHEfoKRgf/540="
+          ++ piperVoice "de/de_DE/kerstin/low/de_DE-kerstin-low"
+            "sha256-01KnZBiSzr8pA4Wa+U6bqBoUERAhX+OUO82n99pAG3o="
+            "sha256-VucIVWt7m3pTxPiVfgIUIeafEaYAliu6VUz/vnLPLUc="
+          ++ piperVoice "en/en_US/lessac/medium/en_US-lessac-medium"
+            "sha256-Xv4J5pkCGHgnr2RuGm6dJp3udp+Yd9F7FrG0buqvAZ8="
+            "sha256-7+GcQXvtBV8taZCCSMa6ZQ+hNbyGiw5quz2hgdq2kKA="
+        );
+
+        # Writes libraries/humla/src/testSpeech/speech/*.wav + MANIFEST.txt; run from the checkout's root.
+        speechCorpus = pkgs.writeShellApplication {
+          name = "mumla-speech-corpus";
+          runtimeInputs = with pkgs; [ piper-tts sox coreutils gnused ];
+          text = ''
+            export PIPER_VOICES="${piperVoices}"
+            export PIPER_VERSION="${pkgs.piper-tts.version}"
+            exec bash ${./tools/speech-corpus/generate.sh} "$@"
+          '';
+        };
       in {
         devShells.default = pkgs.mkShell {
           name = "mumla-android-dev";
@@ -104,6 +140,12 @@
         apps.android-studio = {
           type = "app";
           program = "${studioLauncher}/bin/mumla-android-studio";
+        };
+
+        # `nix run .#speech-corpus` regenerates the device tests' speech clips (commit the result).
+        apps.speech-corpus = {
+          type = "app";
+          program = "${speechCorpus}/bin/mumla-speech-corpus";
         };
       }
     );
