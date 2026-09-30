@@ -78,13 +78,17 @@ data class DoubleTalkTestUiState(
  * The strength slider applies to a running test at once, and is stored when the user lets go
  * ([commitStrength]), not on every step.
  */
+@Suppress("TooManyFunctions") // One user action or engine event per function.
 class DoubleTalkTestViewModel(
     private val settings: Settings,
     private val engines: SelfTestEngineFactory,
     private val worker: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(1),
 ) : ViewModel() {
     private val _state = MutableStateFlow(
-        DoubleTalkTestUiState(strength = settings.rnnoiseStrength, strengthIsDefault = settings.isRnnoiseStrengthDefault),
+        DoubleTalkTestUiState(
+            strength = settings.rnnoiseStrength,
+            strengthIsDefault = settings.isRnnoiseStrengthDefault,
+        ),
     )
     val state: StateFlow<DoubleTalkTestUiState> = _state.asStateFlow()
 
@@ -144,14 +148,11 @@ class DoubleTalkTestViewModel(
             engines.create(::onReading).also { it.start() }
         } catch (e: AudioInitializationException) {
             unavailable(e)
-            return
         } catch (e: IOException) {
             unavailable(e)
-            return
         } catch (e: IllegalStateException) {
             unavailable(e)
-            return
-        }
+        } ?: return
         engine = test
         // The slider may have moved while the voice was being decoded.
         test.setAttenuationLimitDb(Settings.rnnoiseLimitDbOf(_state.value.strength))
@@ -167,12 +168,14 @@ class DoubleTalkTestViewModel(
         engine = null
     }
 
-    private fun unavailable(e: Exception) {
+    /** Shows that the test cannot run; returns no engine. */
+    private fun unavailable(e: Exception): SelfTestEngine? {
         Log.w(TAG, "the double-talk test could not start", e)
         _state.update {
             if (it.status != DoubleTalkTestUiState.Status.STARTING) it
             else it.copy(status = DoubleTalkTestUiState.Status.UNAVAILABLE, meter = null)
         }
+        return null
     }
 
     private fun onReading(reading: SelfTestReading) {

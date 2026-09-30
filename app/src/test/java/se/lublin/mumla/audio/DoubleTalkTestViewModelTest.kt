@@ -79,10 +79,11 @@ class DoubleTalkTestViewModelTest {
             worker,
         )
 
-    private fun reading(voice: Boolean, phase: SelfTestPhase = SelfTestPhase.TALK, heard: Int? = null) = SelfTestReading(
-        MeterReading(-20f, -60f, -20f, -40f, voice, holding = false, tooClose = false),
-        phase, voicePlaying = true, heardPercent = heard, falseOpenPercent = 3,
-    )
+    private fun reading(voice: Boolean, phase: SelfTestPhase = SelfTestPhase.TALK, heard: Int? = null) =
+        SelfTestReading(
+            MeterReading(-20f, -60f, -20f, -40f, voice, holding = false, tooClose = false),
+            phase, voicePlaying = true, heardPercent = heard, falseOpenPercent = 3,
+        )
 
     @Test
     fun `a new screen is idle, dark, and shows the stored strength`() {
@@ -254,7 +255,8 @@ class DoubleTalkTestViewModelTest {
     fun `clearing the model stops a running test`() {
         val store = ViewModelStore()
         val made = model()
-        val model = ViewModelProvider(store, viewModelFactory { initializer { made } })[DoubleTalkTestViewModel::class.java]
+        val factory = viewModelFactory { initializer { made } }
+        val model = ViewModelProvider(store, factory)[DoubleTalkTestViewModel::class.java]
         model.start()
 
         store.clear()

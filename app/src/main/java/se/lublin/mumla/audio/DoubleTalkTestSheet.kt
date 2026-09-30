@@ -158,8 +158,9 @@ class DoubleTalkTestSheet : BottomSheetDialogFragment() {
         binding.doubleTalkMeter.show(state.meter, VadConfig.DEFAULT_HYSTERESIS_DB)
         binding.doubleTalkHeard.text = state.heardPercent?.let { getString(R.string.double_talk_heard, it) }
             ?: getString(R.string.double_talk_heard_pending)
-        binding.doubleTalkFalseOpen.text = state.falseOpenPercent?.let { getString(R.string.double_talk_false_open, it) }
-            ?: getString(R.string.double_talk_false_open_pending)
+        binding.doubleTalkFalseOpen.text =
+            state.falseOpenPercent?.let { getString(R.string.double_talk_false_open, it) }
+                ?: getString(R.string.double_talk_false_open_pending)
         renderStrength(binding, state)
     }
 

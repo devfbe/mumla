@@ -113,7 +113,8 @@ class SettingsAudioTest {
         // A hand-edited file below the range must not reach the pipeline as a negative limit.
         settings.rnnoiseStrength = -4
         assertThat(settings.rnnoiseAttenuationLimitDb).isEqualTo(Settings.RNNOISE_LIMIT_MIN_DB.toFloat())
-        assertThat(Settings.RNNOISE_LIMIT_UNLIMITED).isEqualTo(Settings.RNNOISE_LIMIT_MAX_DB + Settings.RNNOISE_LIMIT_STEP_DB)
+        assertThat(Settings.RNNOISE_LIMIT_UNLIMITED)
+            .isEqualTo(Settings.RNNOISE_LIMIT_MAX_DB + Settings.RNNOISE_LIMIT_STEP_DB)
     }
 
     @Test

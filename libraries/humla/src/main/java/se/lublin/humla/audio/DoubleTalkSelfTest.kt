@@ -402,7 +402,7 @@ public class DoubleTalkSelfTest internal constructor(
             val levels = FloatArray(frames) { f ->
                 var sum = 0.0
                 for (i in f * FRAME until (f + 1) * FRAME) sum += voice[i].toDouble() * voice[i]
-                (10 * log10(sum / FRAME / FULL_SCALE_SQUARED + TINY)).toFloat()
+                (POWER_DB_PER_DECADE * log10(sum / FRAME / FULL_SCALE_SQUARED + TINY)).toFloat()
             }
             val loudest = levels.maxOrNull() ?: return BooleanArray(0)
             val voiced = BooleanArray(frames) { levels[it] > loudest - VOICED_RANGE_DB }
@@ -413,5 +413,6 @@ public class DoubleTalkSelfTest internal constructor(
 
         private const val FULL_SCALE_SQUARED = 32768.0 * 32768.0
         private const val TINY = 1e-12
+        private const val POWER_DB_PER_DECADE = 10
     }
 }

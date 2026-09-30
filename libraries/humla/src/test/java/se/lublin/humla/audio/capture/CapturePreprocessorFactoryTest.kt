@@ -196,9 +196,12 @@ class CapturePreprocessorFactoryTest {
     /** The user's strength reaches the stage, the shipped 18 dB without one, and the chain hands it out. */
     @Test
     fun `rnnoise gets the requested attenuation limit, or 18 dB when none is asked for`() {
-        val limited = factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC, rnnoiseAttenuationLimitDb = 30f)
+        val limited =
+            factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC, rnnoiseAttenuationLimitDb = 30f)
         val unlimited = factory.create(
-            NoiseSuppressionMode.RNNOISE, EchoCancellationMode.NONE, rnnoiseAttenuationLimitDb = Float.POSITIVE_INFINITY,
+            NoiseSuppressionMode.RNNOISE,
+            EchoCancellationMode.NONE,
+            rnnoiseAttenuationLimitDb = Float.POSITIVE_INFINITY,
         )
         val default = factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.NONE)
 
