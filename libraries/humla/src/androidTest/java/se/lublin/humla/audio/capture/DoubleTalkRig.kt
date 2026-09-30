@@ -35,8 +35,9 @@ import kotlin.math.tanh
 import kotlin.random.Random
 
 /**
- * Synthetic double talk through the real capture chain (`libhumla_native.so`), shared by the
- * device tests in this package.
+ * Double talk through the real capture chain (`libhumla_native.so`), shared by the device tests in
+ * this package. The talkers are synthetic vowels ([Talkers.SYNTHETIC], the default every bound was
+ * measured with) or real speech from Piper ([Talkers.PIPER], see [SpeechCorpus]).
  *
  * Timeline (48 kHz mono, 10 ms frames): far end only (AEC3 converges), then double talk, then near
  * end only. Three runs per chain with an identical far-end reference:
@@ -80,47 +81,82 @@ internal object DoubleTalkRig {
      */
     enum class EchoPath { LINEAR, NONLINEAR }
 
-    /** [talkers] picks the far-end and near-end utterances (vowels, pitch contour); 0 is the reference pair. */
-    class Scenario(val echoGainDb: Float, val nearDbfs: Float, val path: EchoPath, val talkers: Int = 0) {
+    /**
+     * Where the far and near end come from.
+     * - SYNTHETIC: [speechLike] vowels; [Scenario.talkers] seeds the vowels and pitch contour.
+     * - PIPER: the [SpeechCorpus] clips, far end male and near end female; [Scenario.talkers]
+     *   picks one of [PIPER_PAIRS] (German, English and the two mixed pairs).
+     */
+    enum class Talkers { SYNTHETIC, PIPER }
+
+    /** The Piper (far end, near end) pairs, by [Scenario.talkers] modulo their count. */
+    val PIPER_PAIRS: List<Pair<SpeechCorpus.Clip, SpeechCorpus.Clip>> = listOf(
+        SpeechCorpus.Clip.FAR_DE_M to SpeechCorpus.Clip.NEAR_DE_F,
+        SpeechCorpus.Clip.FAR_EN_M to SpeechCorpus.Clip.NEAR_EN_F,
+        SpeechCorpus.Clip.FAR_DE_M to SpeechCorpus.Clip.NEAR_EN_F,
+        SpeechCorpus.Clip.FAR_EN_M to SpeechCorpus.Clip.NEAR_DE_F,
+    )
+
+    /** [talkers] picks the far-end and near-end utterances from [corpus]; 0 is the reference pair. */
+    class Scenario(
+        val echoGainDb: Float,
+        val nearDbfs: Float,
+        val path: EchoPath,
+        val talkers: Int = 0,
+        val corpus: Talkers = Talkers.SYNTHETIC,
+    ) {
         val name: String
             get() = String.format(Locale.ROOT, "%s echo %+3.0f dB, near %.0f dBFS", path, echoGainDb, nearDbfs) +
-                if (talkers != 0) " #$talkers" else ""
+                (if (corpus == Talkers.PIPER) " piper" else "") + if (talkers != 0) " #$talkers" else ""
     }
 
-    private val farByTalkers = HashMap<Int, FloatArray>()
-    private val nearByTalkers = HashMap<Int, FloatArray>()
+    private val farByTalkers = HashMap<Pair<Talkers, Int>, FloatArray>()
+    private val nearByTalkers = HashMap<Pair<Talkers, Int>, FloatArray>()
 
     /** The far end, near end and noise do not depend on the scenario's echo; generated once. */
     val far: FloatArray get() = far(0)
 
-    fun far(talkers: Int): FloatArray = farByTalkers.getOrPut(talkers) {
-        speechLike(samples, f0 = 115.0, syllableHz = 4.1, seed = 1 + 10 * talkers, dbfs = FAR_DBFS).also {
-            for (i in (Phase.FAR_ONLY.seconds + Phase.DOUBLE_TALK.seconds) * RATE until samples) it[i] = 0f
+    /** The far end talks through far end only and double talk, then stops. */
+    fun far(talkers: Int, corpus: Talkers = Talkers.SYNTHETIC): FloatArray =
+        farByTalkers.getOrPut(corpus to talkers) {
+            val end = (Phase.FAR_ONLY.seconds + Phase.DOUBLE_TALK.seconds) * RATE
+            when (corpus) {
+                Talkers.SYNTHETIC ->
+                    speechLike(samples, f0 = 115.0, syllableHz = 4.1, seed = 1 + 10 * talkers, dbfs = FAR_DBFS).also {
+                        for (i in end until samples) it[i] = 0f
+                    }
+                Talkers.PIPER -> placed(PIPER_PAIRS[talkers % PIPER_PAIRS.size].first, from = 0, to = end, FAR_DBFS)
+            }
         }
-    }
 
-    private fun nearUnit(talkers: Int): FloatArray = nearByTalkers.getOrPut(talkers) {
-        speechLike(samples, f0 = 205.0, syllableHz = 3.3, seed = 2 + 10 * talkers, dbfs = 0f).also {
-            for (i in 0 until Phase.FAR_ONLY.seconds * RATE) it[i] = 0f
+    /** The near end starts with double talk and goes on to the end, at 0 dBFS active level. */
+    private fun nearUnit(talkers: Int, corpus: Talkers): FloatArray = nearByTalkers.getOrPut(corpus to talkers) {
+        val start = Phase.FAR_ONLY.seconds * RATE
+        when (corpus) {
+            Talkers.SYNTHETIC ->
+                speechLike(samples, f0 = 205.0, syllableHz = 3.3, seed = 2 + 10 * talkers, dbfs = 0f).also {
+                    for (i in 0 until start) it[i] = 0f
+                }
+            Talkers.PIPER -> placed(PIPER_PAIRS[talkers % PIPER_PAIRS.size].second, from = start, to = samples, 0f)
         }
     }
     val noiseFloor: FloatArray by lazy { whiteNoise(samples, NOISE_DBFS, seed = 3) }
     val silence: FloatArray by lazy { FloatArray(samples) }
 
-    fun near(nearDbfs: Float, talkers: Int = 0): FloatArray {
+    fun near(nearDbfs: Float, talkers: Int = 0, corpus: Talkers = Talkers.SYNTHETIC): FloatArray {
         val gain = 10.0.pow(nearDbfs / 20.0).toFloat()
-        val unit = nearUnit(talkers)
+        val unit = nearUnit(talkers, corpus)
         return FloatArray(samples) { unit[it] * gain }
     }
 
     fun echo(scenario: Scenario): FloatArray = when (scenario.path) {
-        EchoPath.LINEAR -> linearEcho(far(scenario.talkers), scenario.echoGainDb)
-        EchoPath.NONLINEAR -> nonlinearEcho(far(scenario.talkers), scenario.echoGainDb)
+        EchoPath.LINEAR -> linearEcho(far(scenario.talkers, scenario.corpus), scenario.echoGainDb)
+        EchoPath.NONLINEAR -> nonlinearEcho(far(scenario.talkers, scenario.corpus), scenario.echoGainDb)
     }
 
     /** Frames in double talk where the near end is actually voiced (within 10 dB of its level). */
-    fun voicedDoubleTalkFrames(nearDbfs: Float, talkers: Int = 0): List<Int> {
-        val near = near(nearDbfs, talkers)
+    fun voicedDoubleTalkFrames(nearDbfs: Float, talkers: Int = 0, corpus: Talkers = Talkers.SYNTHETIC): List<Int> {
+        val near = near(nearDbfs, talkers, corpus)
         return (dtStart until dtEnd).filter { dbfs(meanPower(near, it, it + 1)) > nearDbfs - 10f }
     }
 
@@ -203,18 +239,21 @@ internal object DoubleTalkRig {
     }
 
     /** Run C (the near end alone) of one chain; it does not depend on the echo. */
-    fun runNearAlone(chain: CaptureChain, nearDbfs: Float, talkers: Int = 0): Run =
-        run(chain, silence, sum(near(nearDbfs, talkers), noiseFloor))
+    fun runNearAlone(chain: CaptureChain, nearDbfs: Float, talkers: Int = 0, corpus: Talkers = Talkers.SYNTHETIC): Run =
+        run(chain, silence, sum(near(nearDbfs, talkers, corpus), noiseFloor))
 
     /** Share of voiced near-end frames (double talk and near-only phases) on which [nearAlone]'s gate is open. */
-    fun nearAloneGate(nearAlone: Run, nearDbfs: Float, talkers: Int = 0): Float {
-        val near = near(nearDbfs, talkers)
+    fun nearAloneGate(nearAlone: Run, nearDbfs: Float, talkers: Int = 0, corpus: Talkers = Talkers.SYNTHETIC): Float {
+        val near = near(nearDbfs, talkers, corpus)
         val voiced = (dtStart until frames).filter { dbfs(meanPower(near, it, it + 1)) > nearDbfs - 10f }
         return voiced.count { nearAlone.transmit[it] }.toFloat() / voiced.size
     }
 
-    /** Background noise with no speech: fan-like pink noise, or babble (six talkers at once). */
-    enum class Noise { PINK, BABBLE }
+    /**
+     * Background noise with no speech of its own: fan-like pink noise, babble of six synthetic
+     * talkers at once, or BABBLE_REAL, eight streams of the [SpeechCorpus] clips at staggered offsets.
+     */
+    enum class Noise { PINK, BABBLE, BABBLE_REAL }
 
     private val noises = HashMap<Pair<Noise, Float>, FloatArray>()
 
@@ -222,6 +261,7 @@ internal object DoubleTalkRig {
         when (kind) {
             Noise.PINK -> pinkNoise(samples, dbfs, seed = 5)
             Noise.BABBLE -> babble(samples, dbfs)
+            Noise.BABBLE_REAL -> realBabble(samples, dbfs)
         }
     }
 
@@ -277,7 +317,7 @@ internal object DoubleTalkRig {
     fun mics(scenario: Scenario): Mics {
         val echo = echo(scenario)
         return Mics(
-            a = sum(echo, near(scenario.nearDbfs, scenario.talkers), noiseFloor),
+            a = sum(echo, near(scenario.nearDbfs, scenario.talkers, scenario.corpus), noiseFloor),
             b = sum(echo, noiseFloor),
             echoInDbfs = dbfs(meanPower(echo, 0, dtStart)),
         )
@@ -289,13 +329,13 @@ internal object DoubleTalkRig {
         nearAlone: Run,
         mics: Mics = mics(scenario),
     ): Measurement {
-        val far = far(scenario.talkers)
+        val far = far(scenario.talkers, scenario.corpus)
         val a = run(build(), far, mics.a)
         val b = run(build(), far, mics.b)
         val c = nearAlone
         val kept = db(max(mean(a.power, dtStart, dtEnd) - mean(b.power, dtStart, dtEnd), TINY) /
             max(mean(c.power, dtStart, dtEnd), TINY))
-        val voiced = voicedDoubleTalkFrames(scenario.nearDbfs, scenario.talkers)
+        val voiced = voicedDoubleTalkFrames(scenario.nearDbfs, scenario.talkers, scenario.corpus)
         val echoOnly = CONVERGED_FRAME until dtEnd
         val levels = echoOnly.map { dbfs(b.power[it]) }.sorted()
         return Measurement(
@@ -453,6 +493,46 @@ internal object DoubleTalkRig {
     }
 
     private const val BABBLE_TALKERS = 6
+
+    /**
+     * [clip] from sample [from] to [to] (looped if shorter), silent elsewhere, scaled so its active
+     * part is at [dbfs]. Active: the 10 ms frames within 20 dB of the loudest, the counterpart of
+     * [speechLike]'s envelope above 0.1 for real speech with its pauses.
+     */
+    private fun placed(clip: SpeechCorpus.Clip, from: Int, to: Int, dbfs: Float): FloatArray {
+        val source = SpeechCorpus.load(clip)
+        val out = FloatArray(samples)
+        for (i in from until to) out[i] = source[(i - from) % source.size]
+        return activeScaled(out, dbfs)
+    }
+
+    private fun activeScaled(signal: FloatArray, dbfs: Float): FloatArray {
+        val powers = DoubleArray(frames) { meanPower(signal, it, it + 1) }
+        val floor = powers.max() / ACTIVE_RANGE
+        val active = powers.filter { it > floor }
+        val rms = sqrt(active.average()) / FULL_SCALE
+        val gain = (10.0.pow(dbfs / 20.0) / rms).toFloat()
+        for (i in signal.indices) signal[i] *= gain
+        return signal
+    }
+
+    /** Every [SpeechCorpus] clip twice, each copy at its own offset, looped over the timeline. */
+    private fun realBabble(samples: Int, dbfs: Float): FloatArray {
+        val out = FloatArray(samples)
+        val clips = SpeechCorpus.Clip.entries
+        for (copy in 0 until 2) {
+            for ((k, clip) in clips.withIndex()) {
+                val source = SpeechCorpus.load(clip)
+                val shift = ((copy * clips.size + k) * REAL_BABBLE_STAGGER_SECONDS * RATE).toInt()
+                for (i in out.indices) out[i] += source[(i + shift) % source.size]
+            }
+        }
+        return scaled(out, dbfs)
+    }
+
+    /** 20 dB, as a power ratio. */
+    private const val ACTIVE_RANGE = 100.0
+    private const val REAL_BABBLE_STAGGER_SECONDS = 1.45
 
     /** Vowel formants (F1, F2, F3) in Hz. */
     private val VOWELS = arrayOf(
