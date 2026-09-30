@@ -87,6 +87,7 @@ class RealSpeechDeviceTest {
         val factory = CapturePreprocessorFactory(log = { Log.w(DoubleTalkRig.TAG, it) })
         val chains = listOf<Pair<String, () -> CaptureChain>>(
             SHIPPED to { factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC) },
+            UNLIMITED to { DoubleTalkRig.limitedChain(Float.POSITIVE_INFINITY, agcAfter = false) },
             "APM only" to { factory.create(NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC) },
         )
         log(HEADER)
@@ -108,14 +109,26 @@ class RealSpeechDeviceTest {
             val what = "${row.chain}, Piper pair #${row.pair}"
             assertWithMessage("%s: near end alone, gate open", what).that(row.nearAloneGate).isAtLeast(0.9f)
             assertWithMessage("%s: echo alone, mean false-open", what).that(row.falseOpen).isAtMost(0.15)
-            if (row.chain == SHIPPED) {
-                // Measured 66-81 % and 34-39 %: RNNoise still zeroes real near-end speech in double talk.
-                assertWithMessage("%s: double-talk gate, mean", what).that(row.gateOpen).isIn(Range.closed(0.55, 0.92))
-                assertWithMessage("%s: zeroed voiced frames, mean", what).that(row.zeroed).isIn(Range.closed(0.2, 0.55))
-            } else {
-                // Measured 82-90 % and none: without RNNoise nothing is zeroed.
-                assertWithMessage("%s: double-talk gate, mean", what).that(row.gateOpen).isAtLeast(0.72)
-                assertWithMessage("%s: zeroed voiced frames, mean", what).that(row.zeroed).isAtMost(0.05)
+            when (row.chain) {
+                SHIPPED -> {
+                    // The shipped chain is limitedChain(18 dB, AGC2 in front), which the sweep below
+                    // measured at 85-86 % mean gate; the limit keeps RNNoise from zeroing the near end
+                    // (0 % zeroed in DoubleTalkAec3DeviceTest). Bounded per pair a little below that.
+                    assertWithMessage("%s: double-talk gate, mean", what).that(row.gateOpen).isAtLeast(SHIPPED_MIN_GATE)
+                    assertWithMessage("%s: zeroed voiced frames, mean", what).that(row.zeroed).isAtMost(0.05)
+                }
+                UNLIMITED -> {
+                    // Measured 66-81 % and 34-39 %: RNNoise alone still zeroes real near-end speech.
+                    assertWithMessage("%s: double-talk gate, mean", what).that(row.gateOpen)
+                        .isIn(Range.closed(0.55, 0.92))
+                    assertWithMessage("%s: zeroed voiced frames, mean", what).that(row.zeroed)
+                        .isIn(Range.closed(0.2, 0.55))
+                }
+                else -> {
+                    // Measured 82-90 % and none: without RNNoise nothing is zeroed.
+                    assertWithMessage("%s: double-talk gate, mean", what).that(row.gateOpen).isAtLeast(0.72)
+                    assertWithMessage("%s: zeroed voiced frames, mean", what).that(row.zeroed).isAtMost(0.05)
+                }
             }
         }
     }
@@ -246,6 +259,8 @@ class RealSpeechDeviceTest {
 
     private companion object {
         const val SHIPPED = "shipped"
+        const val UNLIMITED = "no limit"
+        const val SHIPPED_MIN_GATE = 0.72
         const val RESIDUAL_TOLERANCE_DB = 6.0
         const val NEAR_DBFS = -26f
         const val NOISE_DBFS = -45f

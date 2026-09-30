@@ -120,14 +120,18 @@ import kotlin.math.sqrt
  *   echo-only samples are exact zeros (also with the AEC effect disabled, so the gate is not the
  *   effect), FO 0 %, residual about -100 dBFS. In double talk the platform lets the louder near
  *   end through, but zeroes 17 / 30 / 50 % of the double-talk samples (near alone: 12 / 10 / 26 %).
- *   Shipped chain DT 94 / 60 / 17 %, near end alone 98 / 97 / 21 %; with RNNoise limited to 18 dB
- *   DT 97 / 91 / 80 %, near alone 98 / 99 / 96 %, FO still 0 %.
+ *   RNNoise without a limit (the chain shipped until then) DT 94 / 60 / 17 %, near end alone
+ *   98 / 97 / 21 %; limited to 18 dB DT 97 / 91 / 80 %, near alone 98 / 99 / 96 %, FO still 0 %.
+ *   This is why 18 dB is the shipped default ("shipped" below; "no limit" is the old chain).
  * - VOICE_RECOGNITION and UNPROCESSED hear everything (no zeros); AEC3 converges (ERLE 32-38 dB),
- *   echo delay as AEC3 sees it about 290 ms. Shipped chain DT 44-48 / 42-43 / 33-53 %, FO 0-15 %;
+ *   echo delay as AEC3 sees it about 290 ms. No limit DT 44-48 / 42-43 / 33-53 %, FO 0-15 %;
  *   limited to 18 dB DT 84-87 / 51-53 / 37 %, FO 0-12 %, residual -66 to -87 dBFS.
  * - Normal mode: the media stream at maximum puts the echo about 20 dB higher (-12 to -16 dBFS);
- *   no source is gated; shipped chain FO 3-32 %, DT 8-44 %.
+ *   no source is gated; no limit FO 3-32 %, DT 8-44 %.
  * - The platform AEC and NS effects change none of this materially.
+ *
+ * Step-by-step instructions, the full table and how to read `results.csv` are in
+ * `docs/audio-testing.md`.
  */
 @LargeTest
 @RunWith(AndroidJUnit4::class)
@@ -512,7 +516,7 @@ class RoomAcousticsDeviceTest {
         val factory = CapturePreprocessorFactory(log = { Log.w(TAG, it) })
         val chains = linkedMapOf<String, () -> CaptureChain>(
             "shipped" to { factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC) },
-            "rnn18" to { DoubleTalkRig.limitedChain(LIMIT_DB, agcAfter = false) },
+            "nolimit" to { DoubleTalkRig.limitedChain(Float.POSITIVE_INFINITY, agcAfter = false) },
             "apm" to { factory.create(NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC) },
         ).mapValues { (_, build) -> measure(replay(build(), capture, far), w) }
         return Row(config, capture, raw, chains)
@@ -732,7 +736,6 @@ class RoomAcousticsDeviceTest {
         const val SETTLE_MS = 500L
         const val WAV_HEADER = 44
         const val APP_ONSET_FRAMES = 2
-        const val LIMIT_DB = 18f
         const val P95 = 0.95
         const val ACTIVE_RANGE = 100.0 // 20 dB, as a power ratio
         const val VOICED_RANGE = 10.0 // 10 dB, as a power ratio

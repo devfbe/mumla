@@ -36,8 +36,9 @@ import java.util.Locale
  * from 12 to 30 dB with AGC2 in front lifts the double-talk gate from 44 % to 85 % and the near end
  * alone from 73 % to 97 %, and halves the mean echo-only false transmit (21 to 10 %), but on the
  * loud nonlinear echo path (+6 dB) echo alone opens the gate 12-16 points more often than without
- * a limit. AGC2 behind RNNoise lifts residual babble from about -48 to -26 dBFS. Neither ships:
- * see [RnnoisePreprocessor.ATTENUATION_LIMIT_DB].
+ * a limit. AGC2 behind RNNoise lifts residual babble from about -48 to -26 dBFS, so AGC2 stays in
+ * front. With real speech and in a real room 18 dB did not show that echo-only penalty, and it
+ * ships: see [RnnoisePreprocessor.ATTENUATION_LIMIT_DB]. "X=inf" here is RNNoise without a limit.
  */
 @RunWith(AndroidJUnit4::class)
 class RnnoiseAttenuationLimitDeviceTest {

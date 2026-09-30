@@ -29,6 +29,10 @@ The phone lies next to the PC speaker. This script
 
 Start this script first, then RoomAcousticsDeviceTest from Android Studio. Uses only the Python
 standard library, adb and pw-play. The clip is read with `git show`, so the checkout stays untouched.
+
+With --selftest it drives DoubleTalkSelfTestDeviceTest instead: it sets debug.mumla.selftest, plays
+the plain clip once on every SELFTEST_TRIGGER line (tag SelfTest) and stops at SELFTEST_DONE; that
+test writes no files, so nothing is pulled.
 """
 
 import argparse
@@ -45,12 +49,13 @@ NEAR_B_OFFSET_SECONDS = 26  # RoomAcousticsDeviceTest.NEAR_B_OFFSET_SECONDS
 ENABLE_PROPERTY = "debug.mumla.roomtest"
 ONLY_PROPERTY = "debug.mumla.roomtest.only"
 PULLED_PROPERTY = "debug.mumla.roomtest.pulled"
+SELFTEST_PROPERTY = "debug.mumla.selftest"
 DEVICE_DIR = "/sdcard/Android/data/se.lublin.humla.test/files/room"
 DEFAULT_SINK = "alsa_output.pci-0000_00_1f.3.analog-stereo"
 
 
-def compose(repo: str, out: str, gain_db: float) -> None:
-    """The near-end file: the clip at 0 s and again at NEAR_B_OFFSET_SECONDS, silence between."""
+def compose(repo: str, out: str, gain_db: float, twice: bool = True) -> None:
+    """The near-end file: the clip at 0 s and, if twice, again at NEAR_B_OFFSET_SECONDS."""
     clip = subprocess.run(
         ["git", "-C", repo, "show", f"HEAD:{NEAR_CLIP}"], check=True, capture_output=True
     ).stdout
@@ -76,12 +81,44 @@ def compose(repo: str, out: str, gain_db: float) -> None:
         o.setnchannels(params.nchannels)
         o.setsampwidth(params.sampwidth)
         o.setframerate(params.framerate)
-        o.writeframes(frames + silence + frames)
+        o.writeframes(frames + silence + frames if twice else frames)
     os.remove(raw)
 
 
 def adb(serial: str, *args: str, check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(["adb", "-s", serial, *args], check=check, capture_output=True, text=True)
+
+
+def selftest(args: argparse.Namespace) -> int:
+    """Drives DoubleTalkSelfTestDeviceTest: the clip once per SELFTEST_TRIGGER, until SELFTEST_DONE."""
+    near = os.path.join(args.out, "near-once.wav")
+    compose(args.repo, near, args.gain_db, twice=False)
+    adb(args.serial, "shell", "setprop", SELFTEST_PROPERTY, "true")
+    logcat = subprocess.Popen(
+        ["adb", "-s", args.serial, "logcat", "-T", "1", "-s", "SelfTest:I"], stdout=subprocess.PIPE, text=True,
+    )
+    players = []
+    deadline = time.monotonic() + args.timeout
+    print(f"near end: {near}; now start DoubleTalkSelfTestDeviceTest from Android Studio", flush=True)
+    try:
+        with open(os.path.join(args.out, "selftest.log"), "a") as log:
+            for line in logcat.stdout:
+                log.write(line)
+                log.flush()
+                print(line.rstrip(), flush=True)
+                if "SELFTEST_TRIGGER" in line:
+                    players.append(subprocess.Popen(["pw-play", "--target", args.sink, near]))
+                if "SELFTEST_DONE" in line or time.monotonic() > deadline:
+                    break
+    finally:
+        logcat.terminate()
+        for player in players:
+            try:
+                player.wait(timeout=60)
+            except subprocess.TimeoutExpired:
+                player.terminate()
+        adb(args.serial, "shell", "setprop", SELFTEST_PROPERTY, "false", check=False)
+    return 0
 
 
 def main() -> int:
@@ -95,11 +132,15 @@ def main() -> int:
     parser.add_argument("--timeout", type=int, default=3600, help="give up after this many seconds")
     parser.add_argument("--gain-db", type=float, default=0.0,
                         help="scale the near-end file (a quieter talker) instead of touching the sink volume")
+    parser.add_argument("--selftest", action="store_true",
+                        help="drive DoubleTalkSelfTestDeviceTest instead of RoomAcousticsDeviceTest")
     args = parser.parse_args()
     if not args.serial:
         parser.error("--serial (or ANDROID_SERIAL) is required")
 
     os.makedirs(args.out, exist_ok=True)
+    if args.selftest:
+        return selftest(args)
     near = os.path.join(args.out, "near.wav")
     compose(args.repo, near, args.gain_db)
     adb(args.serial, "shell", "setprop", ENABLE_PROPERTY, "true")

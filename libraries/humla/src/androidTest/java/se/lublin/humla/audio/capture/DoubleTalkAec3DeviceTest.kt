@@ -67,8 +67,9 @@ import kotlin.math.max
  *
  * Measured on an SM-S938B (2026-09): no AEC3 configuration reachable through [Aec3Tuning] keeps
  * the gate open on 90 % of voiced near-end frames without transmitting more echo somewhere; the
- * gate closes because RNNoise, behind AEC3, silences the near end (AEC3 alone keeps it). See
- * [sweepAec3Tunings] and [shippedChainInDoubleTalk].
+ * gate closed because RNNoise, behind AEC3, silenced the near end (AEC3 alone keeps it). The
+ * shipped chain therefore limits RNNoise to 18 dB, which keeps the gate open on 66-97 % of voiced
+ * near-end frames. See [sweepAec3Tunings] and [shippedChainInDoubleTalk].
  */
 @RunWith(AndroidJUnit4::class)
 class DoubleTalkAec3DeviceTest {
@@ -125,40 +126,63 @@ class DoubleTalkAec3DeviceTest {
     }
 
     /**
-     * CHARACTERIZATION, asserted, reference talkers: the shipped chain over the sweep's eight
-     * scenarios, and the finding behind it. Bounds sit a few points outside what the SM-S938B
-     * measured (in brackets), so a tuning or chain change that spams echo or closes the gate
-     * further fails here; one that fixes double talk fails too, and should move the bounds.
+     * CHARACTERIZATION, asserted, reference talkers: the shipped chain (RNNoise limited to 18 dB)
+     * over the sweep's eight scenarios, and the finding behind the limit. Bounds sit outside what
+     * the SM-S938B measured (see the constants), so a tuning or chain change that spams echo or
+     * closes the gate again fails here.
      */
     @Test
     fun shippedChainInDoubleTalk() {
         val factory = CapturePreprocessorFactory(log = { Log.w(DoubleTalkRig.TAG, it) })
         val shipped = { factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC) }
+        val unlimited = { DoubleTalkRig.limitedChain(Float.POSITIVE_INFINITY, agcAfter = false) }
         val apmOnly = { factory.create(NoiseSuppressionMode.NONE, EchoCancellationMode.WEBRTC) }
         val nearShipped = DoubleTalkRig.runNearAlone(shipped(), NEAR_DBFS)
+        val nearUnlimited = DoubleTalkRig.runNearAlone(unlimited(), NEAR_DBFS)
         val nearApmOnly = DoubleTalkRig.runNearAlone(apmOnly(), NEAR_DBFS)
-        for (scenario in SWEEP_SCENARIOS) {
-            val m = DoubleTalkRig.measure(scenario, shipped, nearShipped)
-            logMeasurement("shipped", scenario, m)
-            // Echo only: at most 30 % of frames open (18.6 and 29.9 % on the nonlinear path).
-            assertWithMessage("false transmit on echo alone, %s", scenario.name).that(m.falseOpen).isAtMost(0.35f)
-            // Double talk: the gate still opens on some voiced near-end frames (26-62 %).
-            assertWithMessage("gate in double talk, %s", scenario.name).that(m.gateOpen).isAtLeast(0.15f)
+        // Everything is measured and logged before anything is asserted, so one run gives the table.
+        val sweep = SWEEP_SCENARIOS.map { scenario ->
+            DoubleTalkRig.measure(scenario, shipped, nearShipped)
+                .also { logMeasurement("shipped (18 dB)", scenario, it) }
         }
-        // The finding: AEC3 alone passes the near end, RNNoise behind it silences it.
-        for (echoGainDb in listOf(-20f, 0f)) {
+        val findings = listOf(-20f, 0f).map { echoGainDb ->
             val scenario = Scenario(echoGainDb, NEAR_DBFS, EchoPath.LINEAR)
-            val withRnnoise = DoubleTalkRig.measure(scenario, shipped, nearShipped)
-            val withoutRnnoise = DoubleTalkRig.measure(scenario, apmOnly, nearApmOnly)
-            logMeasurement("APM only", scenario, withoutRnnoise)
-            assertWithMessage("AEC3 alone keeps the gate open, %s (99, 94 %%)", scenario.name)
-                .that(withoutRnnoise.gateOpen).isAtLeast(0.9f)
-            assertWithMessage("RNNoise behind AEC3 closes it, %s (62, 26 %%)", scenario.name)
-                .that(withRnnoise.gateOpen).isAtMost(0.75f)
-            assertWithMessage("RNNoise zeroes voiced near-end frames, %s (45, 64 %%)", scenario.name)
-                .that(withRnnoise.zeroed).isAtLeast(0.3f)
+            Finding(
+                scenario,
+                shipped = DoubleTalkRig.measure(scenario, shipped, nearShipped),
+                unlimited = DoubleTalkRig.measure(scenario, unlimited, nearUnlimited)
+                    .also { logMeasurement("RNNoise unlimited", scenario, it) },
+                apmOnly = DoubleTalkRig.measure(scenario, apmOnly, nearApmOnly)
+                    .also { logMeasurement("APM only", scenario, it) },
+            )
+        }
+        for ((scenario, m) in SWEEP_SCENARIOS.zip(sweep)) {
+            assertWithMessage("false transmit on echo alone, %s", scenario.name).that(m.falseOpen)
+                .isAtMost(SHIPPED_MAX_FALSE_OPEN)
+            assertWithMessage("gate in double talk, %s", scenario.name).that(m.gateOpen).isAtLeast(SHIPPED_MIN_GATE)
+        }
+        // The finding behind the 18 dB default: AEC3 alone passes the near end, unlimited RNNoise
+        // behind it silences it, and the limit gives most of it back.
+        for (f in findings) {
+            val name = f.scenario.name
+            assertWithMessage("AEC3 alone keeps the gate open, %s (99, 94 %%)", name)
+                .that(f.apmOnly.gateOpen).isAtLeast(0.9f)
+            assertWithMessage("unlimited RNNoise behind AEC3 closes it, %s (62, 26 %%)", name)
+                .that(f.unlimited.gateOpen).isAtMost(0.75f)
+            assertWithMessage("unlimited RNNoise zeroes voiced near-end frames, %s (45, 64 %%)", name)
+                .that(f.unlimited.zeroed).isAtLeast(0.3f)
+            assertWithMessage("18 dB zeroes no voiced near-end frame, %s", name).that(f.shipped.zeroed).isAtMost(0.02f)
+            assertWithMessage("18 dB opens the gate more than unlimited, %s", name)
+                .that(f.shipped.gateOpen - f.unlimited.gateOpen).isAtLeast(SHIPPED_MIN_GAIN)
         }
     }
+
+    private class Finding(
+        val scenario: Scenario,
+        val shipped: DoubleTalkRig.Measurement,
+        val unlimited: DoubleTalkRig.Measurement,
+        val apmOnly: DoubleTalkRig.Measurement,
+    )
 
     /**
      * MEASUREMENT HARNESS: every candidate over the eight scenarios (four echo levels, linear and
@@ -283,6 +307,22 @@ class DoubleTalkAec3DeviceTest {
 
     private companion object {
         const val NEAR_DBFS = -26f
+
+        /*
+         * Bounds of shippedChainInDoubleTalk, the 18 dB chain, measured on the SM-S938B
+         * (2026-09-30) with the reference (synthetic) talkers:
+         * - echo alone: 0 % on the linear path; 9.6 / 25.3 / 11.9 / 37.4 % on the nonlinear one
+         *   (-20 / -10 / 0 / +6 dB). Without a limit it was 18.6-29.9 % there: on the loud
+         *   nonlinear path the synthetic vowels open the limited gate more often. Real speech
+         *   (`RealSpeechDeviceTest`) and the real room (`RoomAcousticsDeviceTest`) do not show it,
+         *   which is why the owner shipped 18 dB; this bound holds that trade where it was measured.
+         * - double-talk gate: 97 / 93 / 92 / 74 % linear, 97 / 80 / 71 / 66 % nonlinear.
+         * - against unlimited RNNoise at -20 / 0 dB linear: 97 vs 62 %, 92 vs 26 %; nothing zeroed
+         *   (45 and 64 % without the limit).
+         */
+        const val SHIPPED_MAX_FALSE_OPEN = 0.45f
+        const val SHIPPED_MIN_GATE = 0.55f
+        const val SHIPPED_MIN_GAIN = 0.25f
 
         /** Talker pairs the sweep runs; 1 for a quick look, 3 for a decision. */
         const val SWEEP_TALKERS = 1
