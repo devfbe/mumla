@@ -215,6 +215,85 @@ class RnnoisePreprocessorTest {
         assertThat(stage.attenuationLimitDb).isEqualTo(18f)
     }
 
+    /** A relief whose far end talks on every tick of [now] (or not), for the double-talk tests. */
+    private inner class Talk(val far: Boolean) {
+        var now = 0L
+        val farEnd = FarEndActivity({ now })
+        val relief = DoubleTalkRelief(farEnd, clock = { now })
+        private val loud = ShortArray(FRAME) { 8000 }
+
+        /** Runs [frames] frames of [input] through [stage], the far end playing before each. */
+        fun run(stage: RnnoisePreprocessor, frames: Int): ShortArray {
+            val out = ShortArray(frames * FRAME)
+            val frame = ShortArray(FRAME)
+            for (f in 0 until frames) {
+                if (far) farEnd.onFarEndFrame(loud)
+                for (i in 0 until FRAME) frame[i] = input(f * FRAME + i)
+                stage.process(frame)
+                System.arraycopy(frame, 0, out, f * FRAME, FRAME)
+                now += 10_000_000L
+            }
+            return out
+        }
+    }
+
+    /**
+     * RNNoise deleting the user in double talk (the measured failure): with the relief the user's
+     * voice comes through as it went in, after a ramp that starts at the user's limit and has no step.
+     */
+    @Test
+    fun `talking over the far end, rnnoise's attenuation eases until the input passes unchanged`() {
+        val talk = Talk(far = true)
+        val stage = RnnoisePreprocessor(FakeRnnoiseApi(onProcess = { it.fill(0) }), 18f, relief = talk.relief)
+        val a = 10f.pow(-18f / 20f)
+
+        val out = talk.run(stage, frames = 30)
+
+        for (n in 20 * FRAME until out.size) {
+            assertWithMessage("sample %s", n).that(out[n]).isEqualTo(input(n - LATENCY))
+        }
+        // The evidence takes three frames, so frame 2 (the first with a dry signal) starts at the
+        // user's limit; from there the dry share only grows, sample by sample: no step anywhere.
+        val firstLoud = (2 * FRAME until 3 * FRAME).first { abs(input(it - LATENCY).toInt()) >= 2000 }
+        assertThat(out[firstLoud] / input(firstLoud - LATENCY).toFloat()).isWithin(0.01f).of(a)
+        var previous = a - 1e-3f
+        for (n in 2 * FRAME until 20 * FRAME) {
+            val x = input(n - LATENCY)
+            if (abs(x.toInt()) < 2000) continue
+            val share = out[n] / x.toFloat()
+            assertWithMessage("dry share at sample %s", n).that(share).isAtLeast(previous - 1e-3f)
+            previous = share
+        }
+        assertThat(previous).isWithin(1e-3f).of(1f)
+    }
+
+    /** Talking alone (or noise alone) is exactly what it was: the user's limit, bit for bit. */
+    @Test
+    fun `without the far end the relief changes nothing`() {
+        val talk = Talk(far = false)
+        val relieved = RnnoisePreprocessor(
+            FakeRnnoiseApi(onProcess = DelayingDenoiser(0.05f)::process), 18f, relief = talk.relief,
+        )
+        val plain = RnnoisePreprocessor(FakeRnnoiseApi(onProcess = DelayingDenoiser(0.05f)::process), 18f)
+
+        assertThat(talk.run(relieved, 20)).isEqualTo(run(plain, 20))
+        assertThat(talk.relief.engaged).isFalse()
+    }
+
+    /** Unlimited stays RNNoise's own output outside double talk, even with a relief. */
+    @Test
+    fun `with a relief but no far end, no limit is still rnnoise's own output`() {
+        val talk = Talk(far = false)
+        val relieved = RnnoisePreprocessor(
+            FakeRnnoiseApi(onProcess = DelayingDenoiser(0.3f)::process), Float.POSITIVE_INFINITY, relief = talk.relief,
+        )
+        val plain = RnnoisePreprocessor(
+            FakeRnnoiseApi(onProcess = DelayingDenoiser(0.3f)::process), Float.POSITIVE_INFINITY,
+        )
+
+        assertThat(talk.run(relieved, 8)).isEqualTo(run(plain, 8))
+    }
+
     /** A refused frame never reached rnnoise, so it must not enter the dry path either. */
     @Test
     fun `a refused frame leaves the delay line alone`() {

@@ -60,11 +60,14 @@ internal object LevelToProbability {
  * playback thread ([SingleHandleStage]'s lock covers both threads and release). Per 10 ms tick the
  * far-end frame must go in before the near-end frame containing its echo, or cancellation silently
  * degrades. AEC3 estimates the stream delay itself.
+ *
+ * @param farEndActivity sees every far-end frame before the APM does (which may modify it).
  */
 internal class WebRtcApmPreprocessor private constructor(
     private val api: WebRtcApmApi,
     handle: Long,
     sampleRate: Int,
+    private val farEndActivity: FarEndActivity?,
 ) : SingleHandleStage(handle, "the webrtc audio processing module at $sampleRate Hz"),
     FarEndSink {
 
@@ -72,6 +75,7 @@ internal class WebRtcApmPreprocessor private constructor(
         api: WebRtcApmApi,
         config: WebRtcApmConfig,
         sampleRate: Int = DEFAULT_SAMPLE_RATE,
+        farEndActivity: FarEndActivity? = null,
     ) : this(
         api,
         api.create(
@@ -84,6 +88,7 @@ internal class WebRtcApmPreprocessor private constructor(
             config.aec3?.toArray(),
         ),
         sampleRate,
+        farEndActivity,
     )
 
     /** Samples per far-end frame as reported by the APM; oversized frames lose their tail silently. */
@@ -108,6 +113,7 @@ internal class WebRtcApmPreprocessor private constructor(
     }
 
     override fun onFarEndFrame(handle: Long, frame: ShortArray) {
+        farEndActivity?.onFarEndFrame(frame)
         if (api.processRender(handle, frame) != 0) rejectedFarEndFrames++
     }
 

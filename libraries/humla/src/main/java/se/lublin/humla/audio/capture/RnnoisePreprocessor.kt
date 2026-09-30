@@ -34,6 +34,10 @@ private const val WHAT = "the rnnoise denoiser"
  * line is allocated once and kept filled whatever the limit, so a switch from unlimited to a finite
  * limit mixes an aligned dry signal from its very first frame. Nothing is allocated per frame.
  *
+ * With a [relief] (the WEBRTC chain, see [DoubleTalkRelief]) the limit eases while the user talks
+ * over the far end. The dry share then changes from frame to frame, so it is ramped across each
+ * frame's samples rather than stepped at the frame boundary.
+ *
  * The bridge rejects frames of the wrong length with -1 (no exception on the capture thread); this
  * stage counts those in [rejectedFrames]. Allocates one `Float` box per frame.
  */
@@ -41,6 +45,8 @@ internal class RnnoisePreprocessor(
     private val api: RnnoiseApi,
     attenuationLimitDb: Float = ATTENUATION_LIMIT_DB,
     latency: Int = LATENCY_SAMPLES,
+    /** Eases the limit in double talk; null keeps the limit where the user put it. */
+    val relief: DoubleTalkRelief? = null,
 ) : SingleHandleStage(
     // Checked before the native state exists, so a bad argument leaks nothing.
     run {
@@ -81,19 +87,35 @@ internal class RnnoisePreprocessor(
     /** This frame's dry samples: the input from `latency` samples ago. */
     private val dry = ShortArray(FRAME_SIZE)
 
+    /** The dry share the previous frame ended with, where the next frame's ramp starts. */
+    private var lastDryGain: Float = dryGain
+
     override fun onCaptureFrame(handle: Long, frame: ShortArray): Float? {
         // A short frame is refused by the bridge and must leave the delay line alone.
         val whole = frame.size >= FRAME_SIZE
         if (whole) delay(frame)
+        // The input, before rnnoise overwrites it, tells the relief whether the user is talking.
+        // NaN for "no relief": a nullable Float would box on every frame.
+        val limitDb = if (whole && relief != null) relief.limitFor(frame, FRAME_SIZE, attenuationLimitDb) else Float.NaN
         val probability = api.processFrame(handle, frame)
         // Inverted so NaN is rejected too. -1 is not clamped to 0: that would read as "not speech".
         if (!(probability >= 0f)) {
             rejectedFrames++
             return null
         }
-        // Read once: the gain may change between two frames, never within one.
-        val a = dryGain
-        if (whole && a > 0f) limit(frame, a)
+        // Read once: the user's gain may change between two frames, never within one; only the
+        // relief ramps within a frame.
+        val a = if (limitDb.isNaN()) dryGain else dryGainOf(limitDb)
+        if (whole) {
+            val from = lastDryGain
+            // Without a relief the gain only moves with the user's setting: a step, as before.
+            if (relief == null || from == a) {
+                if (a > 0f) limit(frame, a)
+            } else {
+                ramp(frame, from, a)
+            }
+            lastDryGain = a
+        }
         // Values above 1 would never pass a [0, 1] threshold; clamp.
         return probability.coerceAtMost(1f)
     }
@@ -117,6 +139,16 @@ internal class RnnoisePreprocessor(
     /** `wet + a * (dry - wet)`: a convex combination of two samples, so it cannot overflow. */
     private fun limit(frame: ShortArray, a: Float) {
         for (i in 0 until FRAME_SIZE) {
+            val wet = frame[i].toFloat()
+            frame[i] = Math.round(wet + a * (dry[i] - wet)).toShort()
+        }
+    }
+
+    /** [limit] with the dry share moving linearly from [from] to [to] across the frame. */
+    private fun ramp(frame: ShortArray, from: Float, to: Float) {
+        val step = (to - from) / FRAME_SIZE
+        for (i in 0 until FRAME_SIZE) {
+            val a = if (i == FRAME_SIZE - 1) to else from + step * (i + 1)
             val wet = frame[i].toFloat()
             frame[i] = Math.round(wet + a * (dry[i] - wet)).toShort()
         }

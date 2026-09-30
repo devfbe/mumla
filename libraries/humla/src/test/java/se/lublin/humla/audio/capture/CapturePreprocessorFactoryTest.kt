@@ -235,6 +235,44 @@ class CapturePreprocessorFactoryTest {
         assertThat(tap.released).isTrue()
     }
 
+    /**
+     * Only the canceller knows when the far end talks, so only a chain with both the canceller and
+     * RNNoise eases RNNoise in double talk; its far-end frames are what drive the relief.
+     */
+    @Test
+    fun `rnnoise behind the canceller eases in double talk, fed by the canceller's far end`() {
+        var now = 0L
+        val deleting = FakeRnnoiseApi(probability = 0.1f, onProcess = { it.fill(0) })
+        val factory = CapturePreprocessorFactory({ speex }, { deleting }, { FakeWebRtcApmApi() }, clock = { now })
+        val chain = factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC)
+        val relief = chain.rnnoise?.relief
+        val voice = ShortArray(FRAME) { if (it % 2 == 0) 6000 else -6000 }
+        val frame = ShortArray(FRAME)
+
+        assertThat(relief).isNotNull()
+        repeat(20) {
+            chain.farEndSink!!.analyzeReverseStream(voice.copyOf())
+            voice.copyInto(frame)
+            chain.preprocessor.process(frame)
+            now += 10_000_000L
+        }
+
+        assertThat(relief!!.engaged).isTrue()
+        assertWithMessage("the user's voice passes rnnoise unattenuated").that(frame).isEqualTo(voice)
+        assertThat(factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.NONE).rnnoise?.relief).isNull()
+    }
+
+    /** Without far-end frames the relief has nothing to go by and must not be built half-wired. */
+    @Test
+    fun `rnnoise gets no relief when the canceller could not be built`() {
+        apm.failCreate = true
+
+        val chain = factory.create(NoiseSuppressionMode.RNNOISE, EchoCancellationMode.WEBRTC)
+
+        assertThat(chain.rnnoise).isNotNull()
+        assertThat(chain.rnnoise?.relief).isNull()
+    }
+
     private class Outcome(val order: List<String>, val probability: Float?, val logs: List<String>, val farEnd: Boolean)
 
     /**
@@ -254,7 +292,8 @@ class CapturePreprocessorFactoryTest {
         fun <T> load(name: String, fake: T): () -> T = { if (stage == name && error != null) throw error else fake }
         val factory = CapturePreprocessorFactory(
             load("Speex", speex), load("RNNoise", rnnoise), load("WebRTC APM", apm),
-        ) { logs += it }
+            log = { logs += it },
+        )
         val chain = factory.create(noise, EchoCancellationMode.WEBRTC)
         return Outcome(order, chain.preprocessor.process(ShortArray(FRAME)), logs, chain.farEndSink != null)
     }
@@ -339,7 +378,8 @@ class CapturePreprocessorFactoryTest {
             for (echo in EchoCancellationMode.entries) {
                 val chain = CapturePreprocessorFactory(
                     { FakeSpeexPreprocessApi() }, { FakeRnnoiseApi() }, { FakeWebRtcApmApi() },
-                ) { logs += it }.create(noise, echo)
+                    log = { logs += it },
+                ).create(noise, echo)
 
                 val probability = chain.preprocessor.process(ShortArray(FRAME))
                 assertWithMessage("%s + %s gave a probability outside [0, 1]: %s", noise, echo, probability)

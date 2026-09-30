@@ -173,6 +173,35 @@ class CaptureThreadAllocationTest {
     }
 
     /**
+     * The double-talk relief runs on both threads: the far end's level on the playback thread, the
+     * user's evidence and the ramp on the capture thread. Neither may add to the probability box.
+     * The frames alternate so the relief engages and releases while it is measured.
+     */
+    @Test
+    fun `the double-talk relief allocates nothing on either thread`() {
+        checkInstrument(FRAME_SIZE)
+        val loud = ShortArray(FRAME_SIZE) { if (it % 2 == 0) 8000 else -8000 }
+        val quiet = ShortArray(FRAME_SIZE)
+        val frame = ShortArray(FRAME_SIZE)
+        val activity = FarEndActivity()
+        val rnnoise = RnnoisePreprocessor(SilentRnnoiseApi(), relief = DoubleTalkRelief(activity))
+        val apm =
+            WebRtcApmPreprocessor(SilentApmApi(), WebRtcApmConfig.FOR_ECHO_CANCELLATION, farEndActivity = activity)
+        var tick = 0
+
+        assertWithMessage("the far end's activity allocates on the playback thread")
+            .that(worstPerCall("WebRtcApmPreprocessor render with activity") { apm.analyzeReverseStream(loud) })
+            .isLessThan(HALF_AN_OBJECT)
+        assertWithMessage("RnnoisePreprocessor with a relief allocates more than the probability box")
+            .that(
+                worstPerCall("RnnoisePreprocessor with relief") {
+                    (if (tick++ % 16 < 8) loud else quiet).copyInto(frame)
+                    rnnoise.process(frame)
+                },
+            ).isLessThan(ONE_BOXED_FLOAT)
+    }
+
+    /**
      * The detector only unboxes an already boxed `Float?` and the pipeline over `NoopPreprocessor`
      * boxes nothing, so both get the strict threshold. Both detector modes are measured because
      * they take different branches of `isVoice`.
