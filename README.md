@@ -86,6 +86,8 @@ If you get an error running out of Java heap space, try raising the `-Xmx` in
   configuration shared by the modules; dependency versions live in
   `gradle/libs.versions.toml`.
 - `NOTICE.md` — third-party components and licenses.
+- `docs/audio-testing.md` — the audio test suite: what each test proves, the Piper
+  speech corpus, how to run the device and room tests, and what they measured.
 
 ## Contributing
 
