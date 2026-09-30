@@ -81,26 +81,28 @@ object SelfTestVoice {
         val index = codec.dequeueInputBuffer(TIMEOUT_US)
         if (index < 0) return false
         val size = extractor.readSampleData(requireNotNull(codec.getInputBuffer(index)), 0)
-        if (size < 0) {
+        val end = size < 0
+        if (end) {
             codec.queueInputBuffer(index, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-            return true
+        } else {
+            codec.queueInputBuffer(index, 0, size, extractor.sampleTime, 0)
+            extractor.advance()
         }
-        codec.queueInputBuffer(index, 0, size, extractor.sampleTime, 0)
-        extractor.advance()
-        return false
+        return end
     }
 
     /** Takes one decoded buffer, if there is one, into [out]; true once the stream has ended. */
-    private fun drain(codec: MediaCodec, info: MediaCodec.BufferInfo, out: Output): Boolean {
-        val index = codec.dequeueOutputBuffer(info, TIMEOUT_US)
-        if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-            val format = codec.outputFormat
-            val rate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-            if (rate != RATE) throw IOException("the test voice decodes at $rate Hz, not $RATE")
-            out.channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-            return false
+    private fun drain(codec: MediaCodec, info: MediaCodec.BufferInfo, out: Output): Boolean =
+        when (val index = codec.dequeueOutputBuffer(info, TIMEOUT_US)) {
+            MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                out.setFormat(codec.outputFormat)
+                false
+            }
+            in 0..Int.MAX_VALUE -> take(codec, index, info, out)
+            else -> false
         }
-        if (index < 0) return false
+
+    private fun take(codec: MediaCodec, index: Int, info: MediaCodec.BufferInfo, out: Output): Boolean {
         val buffer = requireNotNull(codec.getOutputBuffer(index)).order(ByteOrder.nativeOrder())
         buffer.position(info.offset)
         buffer.limit(info.offset + info.size)
@@ -110,9 +112,15 @@ object SelfTestVoice {
     }
 
     /** The decoded samples of the first channel; the clip is mono, a stereo decode duplicates it. */
-    private class Output(var channels: Int) {
+    private class Output(private var channels: Int) {
         private var data = ShortArray(RATE * INITIAL_SECONDS)
         private var size = 0
+
+        fun setFormat(format: MediaFormat) {
+            val rate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+            if (rate != RATE) throw IOException("the test voice decodes at $rate Hz, not $RATE")
+            channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+        }
 
         fun addFirstChannel(samples: ShortBuffer) {
             while (samples.remaining() >= channels) {

@@ -447,14 +447,14 @@
     <string name="battery_optimization_prompt_message">Battery optimization can close Mumla while the screen is off, which drops you from the server. Allow Mumla to run in the background to stay connected. You can change this later under Settings › General › Background connection.</string>
     <string name="battery_optimization_prompt_decline">Not now</string>
     <string name="rnnoise_strength">Maximum noise reduction</string>
-    <string name="rnnoise_strength_sum">How far Strong noise suppression may turn down what it takes for noise. Lower lets others hear you while you talk over them on speakerphone; higher removes more noise.</string>
+    <string name="rnnoise_strength_sum">Lower: heard over others on speaker. Higher: less noise</string>
     <string name="rnnoise_strength_value">%1$d dB</string>
     <string name="rnnoise_strength_unlimited">Unlimited</string>
     <string name="rnnoise_strength_reset">Reset to default</string>
     <string name="rnnoise_strength_reset_sum">Set the maximum noise reduction back to %1$d dB</string>
     <string name="rnnoise_strength_reset_description">Reset maximum noise reduction to the default, %1$d dB</string>
     <string name="double_talk_test">Talk-over test</string>
-    <string name="double_talk_test_sum">A test voice talks on the speaker, like someone in a call, and you talk over it: see whether you would still be heard</string>
+    <string name="double_talk_test_sum">Talk over a test voice: would you still be heard?</string>
     <string name="double_talk_test_open">Talk-over test</string>
     <string name="double_talk_connected">Disconnect to run the talk-over test. It would take the microphone and the speaker from the call.</string>
     <string name="double_talk_idle">Tap Start. A test voice plays on the speaker, the way someone in a call would sound.</string>

@@ -6,7 +6,6 @@
     <ID>CyclomaticComplexMethod:VoiceActivityDetector.kt$VoiceActivityDetector$fun isVoice(pcm: ShortArray, length: Int, probability: Float?): Boolean</ID>
     <ID>CyclomaticComplexMethod:VoiceActivityDetectorTest.kt$VoiceActivityDetectorTest$@Test fun `a long score sequence agrees with the state machine on every frame`()</ID>
     <ID>ForbiddenComment:AudioOutput.kt$AudioOutput$* Fetches audio data from registered audio output users and mixes them into the given buffer. * TODO: add priority speaker support. * @return true if the buffer contains audio data.</ID>
-    <ID>LongParameterList:CaptureWiring.kt$CaptureWiring$( inputSampleRate: Int, inputMode: IInputMode, amplitudeBoost: Float, noise: NoiseSuppressionMode, echo: EchoCancellationMode, speexNoiseSuppressDb: Int = SpeexPreprocessor.DEFAULT_NOISE_SUPPRESS_DB, logger: HumlaLogger? = null, factory: CapturePreprocessorFactory? = null, newResampler: (Int, Int) -&gt; Resampler = { from, to -&gt; SpeexResampler(from, to) }, )</ID>
     <ID>LongParameterList:OpusDecoderNative.kt$OpusDecoderApi$( state: Long, data: ByteArray?, offset: Int, len: Int, out: FloatArray, frameSize: Int, decodeFec: Int, )</ID>
     <ID>LongParameterList:OpusEncoder.kt$OpusEncoder$( sampleRate: Int, channels: Int, private val frameSize: Int, private val framesPerPacket: Int, bitrate: Int, maxBufferSize: Int, private val api: OpusEncoderApi = OpusEncoderNative, )</ID>
     <ID>LongParameterList:SpeexJitterBuffer.kt$SpeexJitterBuffer$(data: ByteArray, length: Int, timestamp: Int, span: Int, sequence: Int, userData: Int)</ID>

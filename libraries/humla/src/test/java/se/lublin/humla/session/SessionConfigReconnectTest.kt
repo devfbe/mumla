@@ -99,6 +99,10 @@ class SessionConfigReconnectTest(
             "audio.pipeline.amplitudeBoost" to pipeline { copy(amplitudeBoost = 1.5f) },
             "audio.pipeline.noiseSuppression" to pipeline { copy(noiseSuppression = NoiseSuppressionMode.RNNOISE) },
             "audio.pipeline.speexNoiseSuppressDb" to pipeline { copy(speexNoiseSuppressDb = -40) },
+            // The noise reduction strength rebuilds the capture chain in place, like every capture setting.
+            "audio.pipeline.rnnoiseAttenuationLimitDb" to pipeline {
+                copy(rnnoiseAttenuationLimitDb = Float.POSITIVE_INFINITY)
+            },
             "audio.pipeline.androidEffects" to pipeline { copy(androidEffects = AndroidAudioEffects(true, true)) },
         )
 

@@ -327,10 +327,11 @@ public class DoubleTalkSelfTest internal constructor(
         while (running) {
             val read = src.read(buffer, frameSize)
             if (read < 0) break
-            if (read == 0) continue
-            val transmit = pipe.process(buffer, read).transmit
-            count(transmit, referenceGate.open, voiceActive[playedFrame])
-            if (++count % readingIntervalFrames == 0) onReading(reading())
+            if (read > 0) {
+                val transmit = pipe.process(buffer, read).transmit
+                count(transmit, referenceGate.open, voiceActive[playedFrame])
+                if (++count % readingIntervalFrames == 0) onReading(reading())
+            }
         }
         src.stop()
     }

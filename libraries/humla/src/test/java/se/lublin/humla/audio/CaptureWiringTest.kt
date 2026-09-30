@@ -59,6 +59,7 @@ class CaptureWiringTest {
         rnnoiseApi = { FakeRnnoiseApi() }, apmApi = { apm }, log = { warnings += it },
     )
 
+    @Suppress("LongParameterList") // The wiring's own parameters, each with the default a test keeps.
     private fun wire(
         noise: NoiseSuppressionMode,
         echo: EchoCancellationMode,
