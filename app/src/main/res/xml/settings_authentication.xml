@@ -23,38 +23,31 @@
         android:key="certificateGenerate"
         android:summary="@string/certificateGenerateSum"
         android:title="@string/certificateGenerate"
-        app:iconSpaceReserved="false">
-        <intent android:action="se.lublin.mumla.app.CERTIFICATE_GENERATE" />
-    </Preference>
+        app:iconSpaceReserved="false" />
 
     <Preference
+        android:key="certificateSelect"
         android:summary="@string/pref_certificate_summary"
         android:title="@string/pref_certificate_title"
-        app:iconSpaceReserved="false">
-        <intent android:action="se.lublin.mumla.app.CERTIFICATE_SELECT" />
-    </Preference>
+        app:iconSpaceReserved="false" />
 
     <Preference
+        android:key="certificateImport"
         android:summary="@string/pref_import_certificate_summary"
         android:title="@string/pref_import_certificate_title"
-        app:iconSpaceReserved="false">
-        <intent android:action="se.lublin.mumla.app.CERTIFICATE_IMPORT" />
-    </Preference>
+        app:iconSpaceReserved="false" />
 
     <Preference
+        android:key="certificateExport"
         android:summary="@string/pref_export_certificate_summary"
         android:title="@string/pref_export_certificate_title"
-        app:iconSpaceReserved="false">
-        <intent android:action="se.lublin.mumla.app.CERTIFICATE_EXPORT" />
-    </Preference>
+        app:iconSpaceReserved="false" />
 
     <Preference
         android:key="clearTrust"
         android:title="@string/clearServerCertificates"
         android:summary="@string/clearServerCertificatesSum"
-        app:iconSpaceReserved="false">
-        <intent android:action="se.lublin.mumla.app.CLEAR_SERVER_CERTIFICATES" />
-    </Preference>
+        app:iconSpaceReserved="false" />
 
     <EditTextPreference
         android:key="defaultUsername"

@@ -17,9 +17,12 @@
 package se.lublin.mumla.preference
 
 import android.content.Context
+import android.content.Intent
 import android.content.res.XmlResourceParser
+import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceGroup
+import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
@@ -101,6 +104,34 @@ class SettingsStructureTest {
         assertThat(tags.filter { it.endsWith("CheckBoxPreference") }).isEmpty()
     }
 
+    /**
+     * A row opens either one of our own screens by class or a web page. An action alone may
+     * resolve to another installed Mumla variant, which declares the same actions.
+     */
+    @Test
+    fun `no row opens a screen by an action alone`() {
+        val implicit = SETTINGS_SCREENS.flatMap { screen ->
+            val root = PreferenceManager(context).inflateFromResource(context, screen, null)
+            buildList {
+                root.visit { preference ->
+                    val intent = preference.intent ?: return@visit
+                    val explicit = intent.component?.packageName == context.packageName
+                    val webPage = intent.action == Intent.ACTION_VIEW && intent.data?.scheme in WEB_SCHEMES
+                    if (!explicit && !webPage) add("${preference.title}: $intent")
+                }
+            }
+        }
+        assertThat(implicit).isEmpty()
+    }
+
+    private fun PreferenceGroup.visit(action: (Preference) -> Unit) {
+        for (i in 0 until preferenceCount) {
+            val preference = getPreference(i)
+            action(preference)
+            if (preference is PreferenceGroup) preference.visit(action)
+        }
+    }
+
     @Test
     fun `the advanced audio settings start collapsed`() {
         val activity = Robolectric.buildActivity(SettingsActivity::class.java).setup().get()
@@ -119,6 +150,7 @@ class SettingsStructureTest {
         const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
         const val APP_NS = "http://schemas.android.com/apk/res-auto"
         const val KEY_ADVANCED = "advanced_audio"
+        val WEB_SCHEMES = setOf("http", "https")
 
         /** Stored state the app keeps for itself, with where it is set instead. */
         val WITHOUT_CONTROL = mapOf(

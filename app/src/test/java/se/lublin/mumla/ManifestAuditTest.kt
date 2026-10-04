@@ -11,14 +11,17 @@ import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.xmlpull.v1.XmlPullParser
+import se.lublin.mumla.app.MumlaActivity
 import se.lublin.mumla.preference.CertificateExportActivity
 import se.lublin.mumla.preference.CertificateGenerateActivity
 import se.lublin.mumla.preference.CertificateImportActivity
 import se.lublin.mumla.preference.CertificateSelectActivity
 import se.lublin.mumla.preference.ServerCertificateClearActivity
 import se.lublin.mumla.service.MumlaService
+import se.lublin.mumla.service.MuteTileService
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -110,6 +113,36 @@ class ManifestAuditTest {
     }
 
     /**
+     * Our own components are opened by class. An intent filter on a component nobody else may
+     * start only invites implicit intents, which can resolve to another installed Mumla variant
+     * that declares the same actions. Exported components keep their filters (launcher, mumble://
+     * links, the quick settings tile).
+     */
+    @Test
+    fun noNonExportedComponentOfOursDeclaresAnIntentFilter() {
+        val flags = PackageManager.GET_ACTIVITIES or PackageManager.GET_SERVICES or PackageManager.GET_RECEIVERS
+        val info = pm.getPackageInfo(context.packageName, flags)
+        val shadow = shadowOf(pm)
+        val components =
+            info.activities.orEmpty().map { Triple(it.name, it.exported, shadow::getIntentFiltersForActivity) } +
+            info.services.orEmpty().map { Triple(it.name, it.exported, shadow::getIntentFiltersForService) } +
+            info.receivers.orEmpty().map { Triple(it.name, it.exported, shadow::getIntentFiltersForReceiver) }
+        val ours = components.filter { (name, _, _) -> name.startsWith(OUR_NAMESPACE) }
+        assertThat(ours).isNotEmpty()
+
+        val offenders = ours
+            .filter { (name, exported, filters) ->
+                !exported && filters(ComponentName(context.packageName, name)).isNotEmpty()
+            }
+            .map { (name, _, _) -> name }
+        assertThat(offenders).isEmpty()
+
+        // Not vacuous: the filters of the exported components are seen.
+        assertThat(shadow.getIntentFiltersForActivity(ComponentName(context, MumlaActivity::class.java))).isNotEmpty()
+        assertThat(shadow.getIntentFiltersForService(ComponentName(context, MuteTileService::class.java))).isNotEmpty()
+    }
+
+    /**
      * Change detector: `databases/mumble.db` holds passwords, tokens and the client certificate
      * next to the favourites, and Auto Backup excludes per file, so `backup_rules` excludes the
      * whole data root from cloud backup while leaving device-to-device transfer unrestricted.
@@ -146,6 +179,8 @@ class ManifestAuditTest {
     }
 
     private companion object {
+        const val OUR_NAMESPACE = "se.lublin.mumla."
+
         val LEFT_RIGHT = Regex(
             """android:(layout_)?(margin|padding)(Left|Right)=|""" +
                 """android:layout_(alignParent|to|align)(Left|Right)(Of)?=|""" +
