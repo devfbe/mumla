@@ -26,6 +26,8 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
 import androidx.recyclerview.widget.AsyncDifferConfig
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
@@ -61,13 +63,17 @@ import java.util.Date
  * @param onImageClicked called with the raw `src` of the tapped row. Before opening
  *   `ImageViewerDialogFragment`, check `findFragmentByTag(ImageViewerDialogFragment.TAG) == null`:
  *   two live viewers would write the same share file.
+ * @param onImageLongPressed called with the raw `src` and the pressed image, as a menu anchor.
  */
-class ChatAdapter(
+class ChatAdapter
+@Suppress("LongParameterList") // The row callbacks, and the threading and diff seams tests replace.
+constructor(
     private val parser: ChatContentParser,
     private val loader: ChatImageLoader,
     private val thumbnailPx: Int,
     private val selfSessionId: () -> Int,
     private val onImageClicked: (String) -> Unit,
+    private val onImageLongPressed: (source: String, anchor: View) -> Unit,
     private val scope: CoroutineScope,
     private val parseDispatcher: CoroutineDispatcher = Dispatchers.Default,
     differConfig: AsyncDifferConfig<IChatMessage> = AsyncDifferConfig.Builder(DIFF).build(),
@@ -108,7 +114,16 @@ class ChatAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val inflater = LayoutInflater.from(parent.context)
         return if (viewType == TYPE_IMAGE) {
-            ImageHolder(ListChatItemImageBinding.inflate(inflater, parent, false))
+            ImageHolder(ListChatItemImageBinding.inflate(inflater, parent, false)).also {
+                // Names the long press for TalkBack, which reads "double-tap and hold to <label>",
+                // so the label is a verb phrase. The null command keeps the view's own long click.
+                ViewCompat.replaceAccessibilityAction(
+                    it.image,
+                    AccessibilityActionCompat.ACTION_LONG_CLICK,
+                    parent.context.getString(R.string.chat_image_actions),
+                    null,
+                )
+            }
         } else {
             TextHolder(ListChatItemBinding.inflate(inflater, parent, false))
         }
@@ -164,6 +179,7 @@ class ChatAdapter(
         holder.image.setImageDrawable(null)
         holder.status.visibility = View.GONE
         holder.image.setOnClickListener { onImageClicked(content.source) }
+        holder.image.setOnLongClickListener { onImageLongPressed(content.source, it); true }
         holder.job?.cancel()
         holder.job = scope.launch {
             when (val result = loader.loadThumbnail(content.source, thumbnailPx, thumbnailPx)) {

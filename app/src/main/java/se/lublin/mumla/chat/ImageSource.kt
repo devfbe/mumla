@@ -67,6 +67,15 @@ sealed class ImageSource {
             }
         }
 
+        /**
+         * Whether [parse] would take [source]'s bytes from the source itself, never the network.
+         * Copies nothing, so it is cheap on the main thread for a source of any length.
+         */
+        fun isInline(source: String): Boolean {
+            val start = source.indexOfFirst { !it.isWhitespace() }
+            return start >= 0 && source.regionMatches(start, DATA_PREFIX, 0, DATA_PREFIX.length, ignoreCase = true)
+        }
+
         private fun parseData(uri: String): ImageSource {
             val comma = uri.indexOf(',')
             if (comma < 0) return Unsupported

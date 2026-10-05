@@ -33,6 +33,23 @@ class ImageSourceTest {
         assertThat(source.bytes).isEqualTo(byteArrayOf(0xFF.toByte(), 0xD8.toByte()))
     }
 
+    /** Inline is what [ImageSource.parse] reads as data: the chat log saves those without the viewer. */
+    @Test
+    fun inlineMeansWhatParseTakesAsData() {
+        val inline = listOf("data:image/png;base64,AAAA", "  \nDATA:IMAGE/png;base64,AAAA", "data:image")
+        val notInline = listOf("https://x.org/a.png", "data:text/plain;base64,AAAA", "", "   ", "x data:image/png")
+        for (source in inline) assertWithMessage(source).that(ImageSource.isInline(source)).isTrue()
+        for (source in notInline) assertWithMessage(source).that(ImageSource.isInline(source)).isFalse()
+    }
+
+    /** Called on the main thread with sources of up to [ImageSource.MAX_SOURCE_LENGTH]: no copy. */
+    @Test
+    fun inlineCopiesNothing() {
+        val source = " ".repeat(16) + "data:image/png;base64," + "A".repeat(ImageSource.MAX_SOURCE_LENGTH)
+        ImageSource.isInline(source)
+        assertThat(allocatedBy { ImageSource.isInline(source) }).isLessThan(64 * 1024L)
+    }
+
     @Test
     fun parsesPlainDataUri() {
         val source = ImageSource.parse("data:image/jpeg;base64,/9g=") as ImageSource.Data

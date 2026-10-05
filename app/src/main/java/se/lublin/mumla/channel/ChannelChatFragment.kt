@@ -36,6 +36,7 @@ import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.PopupMenu
 import androidx.activity.result.contract.ActivityResultContracts.GetContent
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
 import androidx.annotation.VisibleForTesting
@@ -49,16 +50,27 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import se.lublin.mumla.R
 import se.lublin.mumla.chat.ChatAdapter
 import se.lublin.mumla.chat.ChatContentParser
 import se.lublin.mumla.chat.ChatImageLoaders
 import se.lublin.mumla.chat.IChatMessage
+import se.lublin.mumla.chat.ImageFetchException
+import se.lublin.mumla.chat.ImageGallerySaver
+import se.lublin.mumla.chat.ImageShareExporter
+import se.lublin.mumla.chat.ImageSource
 import se.lublin.mumla.chat.ImageViewerDialogFragment
+import se.lublin.mumla.chat.shareChooser
+import se.lublin.mumla.chat.viewSaved
 import se.lublin.mumla.databinding.FragmentChatBinding
 import se.lublin.mumla.ui.showPermissionDeniedSnackbar
 import se.lublin.mumla.ui.showSnackbar
+import java.io.IOException
 
 /** The image preview takes at most a third of the screen height. */
 private const val PREVIEW_SCREEN_FRACTION = 3
@@ -68,6 +80,8 @@ private const val PREVIEW_SCREEN_FRACTION = 3
  * [ChatViewModel]. Parsing and rendering live in [ChatAdapter]. [openImageViewer] is the uniqueness
  * gate `ChatAdapter.onImageClicked` requires, and the adapter gets a `lifecycleScope`
  * (`Dispatchers.Main.immediate`) because its coroutines touch views.
+ * [showImageMenu] answers a long press on a picture with save and share, one action at a time; a
+ * remote picture is saved or shared from the viewer, on the bytes it shows.
  */
 class ChannelChatFragment : Fragment(), MenuProvider {
 
@@ -117,6 +131,7 @@ class ChannelChatFragment : Fragment(), MenuProvider {
             thumbnailPx = resources.getDimensionPixelSize(R.dimen.chat_thumbnail_max),
             selfSessionId = ::sessionId,
             onImageClicked = ::openImageViewer,
+            onImageLongPressed = ::showImageMenu,
             scope = viewLifecycleOwner.lifecycleScope,
         )
         chatList.adapter = adapter
@@ -169,6 +184,9 @@ class ChannelChatFragment : Fragment(), MenuProvider {
     }
 
     override fun onDestroyView() {
+        // An activity window: replacing the fragment (a disconnect does) would leave it on screen.
+        imageMenu?.dismiss()
+        imageMenu = null
         chatList.adapter = null
         super.onDestroyView()
     }
@@ -208,10 +226,85 @@ class ChannelChatFragment : Fragment(), MenuProvider {
      * share path at once.
      */
     @VisibleForTesting
-    internal fun openImageViewer(source: String) {
+    internal fun openImageViewer(source: String, action: ImageViewerDialogFragment.Action? = null) {
         val fm = parentFragmentManager
         if (fm.findFragmentByTag(ImageViewerDialogFragment.TAG) != null) return
-        ImageViewerDialogFragment.newInstance(source).showNow(fm, ImageViewerDialogFragment.TAG)
+        ImageViewerDialogFragment.newInstance(source, action).showNow(fm, ImageViewerDialogFragment.TAG)
+    }
+
+    /** Test seam: the dispatcher image saves and share exports run on. Production code must not set this. */
+    @VisibleForTesting
+    internal var imageIoDispatcher: CoroutineDispatcher = Dispatchers.IO
+
+    /** The running save or share from the log; one at a time (debounce, and one writer per share path). */
+    private var imageAction: Job? = null
+
+    /** The open long-press menu, dismissed with the view. */
+    private var imageMenu: PopupMenu? = null
+
+    /** The long-press menu of a picture in the log, anchored to it. */
+    @VisibleForTesting
+    internal fun showImageMenu(source: String, anchor: View) {
+        imageMenu?.dismiss()
+        // android.widget.PopupMenu: Robolectric shadows only this one (ShadowPopupMenu).
+        imageMenu = PopupMenu(anchor.context, anchor).apply {
+            inflate(R.menu.popup_chat_image)
+            setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    R.id.menu_chat_image_save -> { saveImage(source); true }
+                    R.id.menu_chat_image_share -> { shareImage(source); true }
+                    else -> false
+                }
+            }
+            setOnDismissListener { if (imageMenu === it) imageMenu = null }
+            show()
+        }
+    }
+
+    /**
+     * Saves the picture at [source] to the gallery. The log holds no original bytes (thumbnails
+     * are scaled bitmaps). An inline picture's are in its source, so they are decoded and saved
+     * here. A remote one goes to the viewer, which saves the bytes it shows: a `GET` of its own
+     * here could be answered with a picture nobody saw. Ignored once the view is gone (a menu
+     * choice can still be on its way).
+     */
+    @VisibleForTesting
+    internal fun saveImage(source: String) {
+        if (view == null || imageAction?.isActive == true) return
+        if (!ImageSource.isInline(source)) return openImageViewer(source, ImageViewerDialogFragment.Action.SAVE)
+        val context = requireContext()
+        val loader = ChatImageLoaders.get(context)
+        imageAction = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val bytes = loader.fetchBytes(source)
+                val saved = withContext(imageIoDispatcher) { ImageGallerySaver(context).save(bytes) }
+                showSnackbar(R.string.chat_image_saved, R.string.chat_image_view) { context.viewSaved(saved) }
+            } catch (_: ImageFetchException) {
+                showSnackbar(R.string.chat_image_save_failed)
+            } catch (_: IOException) {
+                showSnackbar(R.string.chat_image_save_failed)
+            }
+        }
+    }
+
+    /** Shares the picture at [source]; inline here, remote through the viewer, as for [saveImage]. */
+    @VisibleForTesting
+    internal fun shareImage(source: String) {
+        if (view == null || imageAction?.isActive == true) return
+        if (!ImageSource.isInline(source)) return openImageViewer(source, ImageViewerDialogFragment.Action.SHARE)
+        val context = requireContext()
+        val loader = ChatImageLoaders.get(context)
+        imageAction = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val bytes = loader.fetchBytes(source)
+                val exported = withContext(imageIoDispatcher) { ImageShareExporter(context).export(source, bytes) }
+                startActivity(shareChooser(context, exported))
+            } catch (_: ImageFetchException) {
+                showSnackbar(R.string.chat_image_load_failed)
+            } catch (_: IOException) {
+                showSnackbar(R.string.chat_image_load_failed)
+            }
+        }
     }
 
     /** Shows [messages] and scrolls to the newest one. */

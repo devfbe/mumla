@@ -88,6 +88,21 @@ class ManifestAuditTest {
         assertThat(permissions).doesNotContain("android.permission.BROADCAST_CLOSE_SYSTEM_DIALOGS")
     }
 
+    /**
+     * Change detector: chat images go to the gallery through MediaStore, which needs no permission
+     * for the app's own rows on API 29+. None of these may come back with a merge.
+     */
+    @Test
+    fun savingImagesNeedsNoStoragePermission() {
+        val permissions = requestedPermissions()
+
+        assertThat(permissions).containsNoneOf(
+            Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            Manifest.permission.READ_MEDIA_IMAGES,
+            Manifest.permission.MANAGE_EXTERNAL_STORAGE,
+        )
+    }
+
     @Test
     fun mumlaServiceIsNotExportedAndDeclaresOnlyTheMicrophoneType() {
         val info = pm.getServiceInfo(ComponentName(context, MumlaService::class.java), 0)

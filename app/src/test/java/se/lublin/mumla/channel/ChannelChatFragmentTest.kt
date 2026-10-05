@@ -16,6 +16,7 @@ import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.PopupMenu
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.appcompat.view.menu.MenuItemImpl
@@ -25,10 +26,12 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.Dispatchers
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -41,6 +44,7 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowDialog
+import org.robolectric.shadows.ShadowPopupMenu
 import se.lublin.humla.IHumlaSession
 import se.lublin.humla.model.ChannelState
 import se.lublin.humla.model.ServerSettings
@@ -54,14 +58,19 @@ import se.lublin.mumla.Settings
 import se.lublin.mumla.chat.ChatAdapter
 import se.lublin.mumla.chat.ChatImageLoader
 import se.lublin.mumla.chat.ChatImageLoaders
+import se.lublin.mumla.chat.FailingOutputStream
+import se.lublin.mumla.chat.FixedRowMediaProvider
 import se.lublin.mumla.chat.IChatMessage
 import se.lublin.mumla.chat.ImageError
 import se.lublin.mumla.chat.ImageFetchException
+import se.lublin.mumla.chat.ImageGallerySaver
 import se.lublin.mumla.chat.ImageResult
 import se.lublin.mumla.chat.ImageViewerDialogFragment
 import se.lublin.mumla.chat.OutgoingImagePreparer
 import se.lublin.mumla.chat.TestImages
 import se.lublin.mumla.session.SessionManager
+import se.lublin.mumla.testing.FileProviderCache
+import se.lublin.mumla.testing.QueueingDispatcher
 import se.lublin.mumla.testing.snackbarAction
 import se.lublin.mumla.testing.resetSnackbars
 import se.lublin.mumla.testing.snackbarText
@@ -80,6 +89,7 @@ import se.lublin.mumla.testing.stubEvents
 import se.lublin.mumla.testing.tapThrough
 import se.lublin.mumla.testing.textMessage
 import se.lublin.mumla.testing.stubState
+import java.io.ByteArrayOutputStream
 
 /**
  * Driven through a real host: the app's session manager holds the session, whose events feed the
@@ -101,6 +111,7 @@ class ChannelChatFragmentTest {
     @Before
     fun setUp() {
         resetSnackbars()
+        FileProviderCache.clear()
         installSession(session.stubConnected())
         every { actions.sendChannelTextMessage(any(), any(), any()) } returns textMessage("out")
     }
@@ -767,6 +778,236 @@ class ChannelChatFragmentTest {
         // this claim is not about.
         assertThat(mine.box.gravity and Gravity.HORIZONTAL_GRAVITY_MASK).isEqualTo(Gravity.RIGHT)
         assertThat(theirs.box.gravity and Gravity.HORIZONTAL_GRAVITY_MASK).isEqualTo(Gravity.LEFT)
+    }
+
+    // ---- the long-press menu: save or share a picture from the log ---------------------------
+
+    private val png = TestImages.png(4, 4)
+    private val picture = "data:image/png;base64,PICTURE"
+
+    /** The log shows one picture whose full bytes are [png]; the actions run without leaving the thread. */
+    private fun launchWithAPicture(): ChatImageLoader {
+        val (loader, _) = installThumbnailLoader()
+        coEvery { loader.fetchBytes(any()) } returns png
+        add(imageMessage(picture))
+        launch()
+        drainMainUntil { itemCount() == 1 }
+        fragment.imageIoDispatcher = Dispatchers.Unconfined
+        return loader
+    }
+
+    /** Long-presses the laid-out picture row, as a finger would, and returns the menu it opened. */
+    private fun longPressThePicture(): PopupMenu {
+        layOutHost()
+        val image = list.getChildAt(0).findViewById<ImageView>(R.id.list_chat_item_image)
+        assertThat(image.performLongClick()).isTrue()
+        return ShadowPopupMenu.getLatestPopupMenu()
+    }
+
+    private fun PopupMenu.choose(id: Int) {
+        assertThat(shadowOf(this).onMenuItemClickListener.onMenuItemClick(menu.findItem(id))).isTrue()
+        idleMainLooper()
+    }
+
+    private fun inserts() = FixedRowMediaProvider.calls.filter { it.op == FixedRowMediaProvider.Op.INSERT }
+
+    @Test
+    fun longPressingAPictureOffersSaveAndShare() {
+        launchWithAPicture()
+
+        val popup = longPressThePicture()
+
+        assertThat(shadowOf(popup).isShowing).isTrue()
+        val ids = (0 until popup.menu.size()).map { popup.menu.getItem(it).itemId }
+        assertThat(ids).containsExactly(R.id.menu_chat_image_save, R.id.menu_chat_image_share).inOrder()
+    }
+
+    @Test
+    fun savingFromTheLogStoresTheFetchedBytesAndOffersToViewThem() {
+        launchWithAPicture()
+        val written = ByteArrayOutputStream()
+        FixedRowMediaProvider.install(into = written)
+
+        longPressThePicture().choose(R.id.menu_chat_image_save)
+
+        assertThat(inserts().single().values!!.getAsString(android.provider.MediaStore.MediaColumns.RELATIVE_PATH))
+            .isEqualTo(ImageGallerySaver.RELATIVE_PATH)
+        assertThat(written.toByteArray()).isEqualTo(png)
+        assertThat(activity.snackbarText()).isEqualTo(activity.getString(R.string.chat_image_saved))
+        val action = snackbarAction(fragment.requireView())
+        assertThat(action.text.toString()).isEqualTo(activity.getString(R.string.chat_image_view))
+        action.performClick()
+        val view = shadowOf(activity).nextStartedActivity
+        assertThat(view.action).isEqualTo(Intent.ACTION_VIEW)
+        assertThat(view.data).isEqualTo(FixedRowMediaProvider.ROW)
+        assertThat(view.type).isEqualTo("image/png")
+    }
+
+    @Test
+    fun sharingFromTheLogStartsAChooserForTheFetchedBytes() {
+        launchWithAPicture()
+
+        longPressThePicture().choose(R.id.menu_chat_image_share)
+
+        val chooser = shadowOf(activity).nextStartedActivity
+        assertThat(chooser.action).isEqualTo(Intent.ACTION_CHOOSER)
+        val send = chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
+        assertThat(send.action).isEqualTo(Intent.ACTION_SEND)
+        assertThat(send.type).isEqualTo("image/png")
+        val uri = send.clipData!!.getItemAt(0).uri
+        assertThat(uri.authority).isEqualTo(activity.packageName + ".fileprovider")
+        assertThat(activity.contentResolver.openInputStream(uri)!!.use { it.readBytes() }).isEqualTo(png)
+    }
+
+    /**
+     * The log holds only scaled thumbnails, so each action on an inline picture decodes its source
+     * once, and never twice.
+     */
+    @Test
+    fun eachActionFromTheLogFetchesOnce() {
+        val loader = launchWithAPicture()
+        FixedRowMediaProvider.install(into = ByteArrayOutputStream())
+
+        longPressThePicture().choose(R.id.menu_chat_image_save)
+        coVerify(exactly = 1) { loader.fetchBytes(picture) }
+
+        longPressThePicture().choose(R.id.menu_chat_image_share)
+        coVerify(exactly = 2) { loader.fetchBytes(picture) }
+    }
+
+    /**
+     * One action at a time: a second save would store a second copy, and a share next to a running
+     * one would write the same staging file. The write is parked so the later choices land in it.
+     */
+    @Test
+    fun aSecondActionWhileTheFirstIsRunningIsRefused() {
+        launchWithAPicture()
+        FixedRowMediaProvider.install(into = ByteArrayOutputStream())
+        val parked = QueueingDispatcher()
+        fragment.imageIoDispatcher = parked
+
+        fragment.saveImage(picture)
+        fragment.saveImage(picture)
+        fragment.shareImage(picture)
+        parked.drain()
+        idleMainLooper()
+
+        assertThat(inserts()).hasSize(1)
+        assertThat(shadowOf(activity).nextStartedActivity).isNull()
+
+        // ...and once it is done, the next one runs.
+        fragment.saveImage(picture)
+        parked.drain()
+        idleMainLooper()
+        assertThat(inserts()).hasSize(2)
+    }
+
+    @Test
+    fun aPictureThatCannotBeFetchedIsNotSavedAndSaysSo() {
+        val loader = launchWithAPicture()
+        coEvery { loader.fetchBytes(any()) } throws ImageFetchException(ImageError.NETWORK)
+        FixedRowMediaProvider.install(into = ByteArrayOutputStream())
+
+        longPressThePicture().choose(R.id.menu_chat_image_save)
+
+        assertThat(activity.snackbarText()).isEqualTo(activity.getString(R.string.chat_image_save_failed))
+        assertThat(FixedRowMediaProvider.calls).isEmpty()
+    }
+
+    @Test
+    fun aPictureThatCannotBeFetchedIsNotSharedAndSaysSo() {
+        val loader = launchWithAPicture()
+        coEvery { loader.fetchBytes(any()) } throws ImageFetchException(ImageError.NETWORK)
+
+        longPressThePicture().choose(R.id.menu_chat_image_share)
+
+        assertThat(activity.snackbarText()).isEqualTo(activity.getString(R.string.chat_image_load_failed))
+        assertThat(shadowOf(activity).nextStartedActivity).isNull()
+    }
+
+    /** A full disk after a good fetch: the row goes again, the user is told, nothing is opened. */
+    @Test
+    fun aSaveFromTheLogThatCannotBeWrittenSaysSoAndLeavesNoRow() {
+        launchWithAPicture()
+        FixedRowMediaProvider.install(into = FailingOutputStream())
+
+        longPressThePicture().choose(R.id.menu_chat_image_save)
+
+        assertThat(activity.snackbarText()).isEqualTo(activity.getString(R.string.chat_image_save_failed))
+        assertThat(FixedRowMediaProvider.calls.map { it.op }).contains(FixedRowMediaProvider.Op.DELETE)
+        assertThat(shadowOf(activity).nextStartedActivity).isNull()
+    }
+
+    /**
+     * The menu is a window of the activity, so replacing the fragment (a disconnect does) would
+     * leave it on screen with listeners into a fragment that is gone.
+     */
+    @Test
+    fun theMenuGoesAwayWithTheView() {
+        launchWithAPicture()
+        val popup = longPressThePicture()
+
+        activity.supportFragmentManager.beginTransaction().remove(parent).commitNow()
+        idleMainLooper()
+
+        assertThat(shadowOf(popup).isShowing).isFalse()
+    }
+
+    /** A choice already on its way when the view went is dropped, not a crash. */
+    @Test
+    fun aChoiceFromAMenuThatOutlivedTheViewIsIgnored() {
+        launchWithAPicture()
+        FixedRowMediaProvider.install(into = ByteArrayOutputStream())
+        val popup = longPressThePicture()
+        activity.supportFragmentManager.beginTransaction().remove(parent).commitNow()
+        idleMainLooper()
+
+        popup.choose(R.id.menu_chat_image_save)
+        popup.choose(R.id.menu_chat_image_share)
+
+        assertThat(FixedRowMediaProvider.calls).isEmpty()
+        assertThat(shadowOf(activity).nextStartedActivity).isNull()
+    }
+
+    private val remote = "https://x.org/a.png"
+
+    /**
+     * A remote picture is saved from the viewer, on the bytes it shows: a fetch of its own behind
+     * the thumbnail would let the host answer it with a picture nobody saw. The viewer's fetch is
+     * the only one.
+     */
+    @Test
+    fun savingARemotePictureFromTheLogGoesThroughTheViewer() {
+        val loader = launchWithAPicture()
+        coEvery { loader.decodeFull(any(), any(), any()) } returns ImageResult.Failed(ImageError.NETWORK)
+        FixedRowMediaProvider.install(into = ByteArrayOutputStream())
+
+        fragment.saveImage(remote)
+        idleMainLooper()
+
+        val viewer = fragment.parentFragmentManager
+            .findFragmentByTag(ImageViewerDialogFragment.TAG) as ImageViewerDialogFragment
+        assertThat(viewer.requireArguments().getString(ImageViewerDialogFragment.ARG_SOURCE)).isEqualTo(remote)
+        assertThat(viewer.requireArguments().getString(ImageViewerDialogFragment.ARG_ACTION))
+            .isEqualTo(ImageViewerDialogFragment.Action.SAVE.name)
+        coVerify(exactly = 1) { loader.fetchBytes(remote) }
+        assertThat(FixedRowMediaProvider.calls).isEmpty()
+    }
+
+    @Test
+    fun sharingARemotePictureFromTheLogGoesThroughTheViewer() {
+        val loader = launchWithAPicture()
+        coEvery { loader.decodeFull(any(), any(), any()) } returns ImageResult.Failed(ImageError.NETWORK)
+
+        fragment.shareImage(remote)
+        idleMainLooper()
+
+        val viewer = fragment.parentFragmentManager
+            .findFragmentByTag(ImageViewerDialogFragment.TAG) as ImageViewerDialogFragment
+        assertThat(viewer.requireArguments().getString(ImageViewerDialogFragment.ARG_ACTION))
+            .isEqualTo(ImageViewerDialogFragment.Action.SHARE.name)
+        coVerify(exactly = 1) { loader.fetchBytes(remote) }
+        assertThat(shadowOf(activity).nextStartedActivity).isNull()
     }
 
     /** The bounds the fragment measures out of `chat_thumbnail_max` are what the loader is asked for. */

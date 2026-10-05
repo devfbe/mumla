@@ -3,6 +3,7 @@ package se.lublin.mumla.chat
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
@@ -37,10 +38,12 @@ import org.robolectric.annotation.GraphicsMode
 import se.lublin.humla.testutil.idleMainLooper
 import se.lublin.mumla.R
 import se.lublin.mumla.testing.resetSnackbars
+import se.lublin.mumla.testing.snackbarAction
 import se.lublin.mumla.testing.snackbarText
 import se.lublin.mumla.testing.FileProviderCache
 import se.lublin.mumla.testing.QueueingDispatcher
 import se.lublin.mumla.testing.tapThrough
+import java.io.ByteArrayOutputStream
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
@@ -114,11 +117,15 @@ class ImageViewerDialogFragmentTest {
     private fun ImageViewerDialogFragment.share(): View =
         requireView().findViewById(R.id.image_viewer_share)
 
+    private fun ImageViewerDialogFragment.save(): View =
+        requireView().findViewById(R.id.image_viewer_save)
+
     private fun ImageViewerDialogFragment.assertShowsTheFailure() {
         assertThat(progress().visibility).isEqualTo(View.GONE)
         assertThat(status().visibility).isEqualTo(View.VISIBLE)
         assertThat(status().text.toString()).isEqualTo(getString(R.string.chat_image_load_failed))
         assertThat(share().isEnabled).isFalse()
+        assertThat(save().isEnabled).isFalse()
         assertThat(image().drawable).isNull()
     }
 
@@ -143,8 +150,11 @@ class ImageViewerDialogFragmentTest {
      * whatever the lambda returned, which would overwrite the bundle [ImageViewerDialogFragment.newInstance]
      * built with `null`.
      */
-    private fun launch(source: String? = this.source): FragmentScenario<ImageViewerDialogFragment> =
-        launchFragment(fragmentArgs = source?.let { ImageViewerDialogFragment.newInstance(it).arguments }) {
+    private fun launch(
+        source: String? = this.source,
+        action: ImageViewerDialogFragment.Action? = null,
+    ): FragmentScenario<ImageViewerDialogFragment> =
+        launchFragment(fragmentArgs = source?.let { ImageViewerDialogFragment.newInstance(it, action).arguments }) {
             ImageViewerDialogFragment()
         }
 
@@ -170,6 +180,7 @@ class ImageViewerDialogFragmentTest {
 
             assertThat(actions.paddingTop).isEqualTo(60)
             assertThat(actions.paddingRight).isEqualTo(90)
+            assertThat(fragment.save().parent).isSameInstanceAs(actions)
         }
     }
 
@@ -191,6 +202,199 @@ class ImageViewerDialogFragmentTest {
         launched { fragment ->
             idleMainLooper()
             fragment.assertShowsTheFailure()
+        }
+    }
+
+    // --- saving to the gallery ----------------------------------------------------------------
+
+    @Test
+    fun aLoadedImageCanBeSaved() {
+        installLoader { TestImages.png(100, 50) }
+        launched { fragment ->
+            idleMainLooper()
+            assertThat(fragment.save().isEnabled).isTrue()
+        }
+    }
+
+    /** The save stores the bytes that were decoded; a second `GET` would re-announce the user's IP. */
+    @Test
+    fun savingStoresTheBytesThatWereShownWithoutGoingBackToTheNetwork() {
+        val shown = TestImages.png(40, 40)
+        val fetched = mutableListOf<String>()
+        installLoader { url -> fetched += url; shown }
+        launched { fragment ->
+            fragment.ioDispatcher = Dispatchers.Unconfined
+            val written = ByteArrayOutputStream()
+            FixedRowMediaProvider.install(into = written)
+            idleMainLooper()
+
+            fragment.tap(R.id.image_viewer_save)
+
+            assertThat(written.toByteArray()).isEqualTo(shown)
+            assertThat(fetched.count { it == source }).isEqualTo(1)
+        }
+    }
+
+    @Test
+    fun aSavedImageSaysSoAndOffersToViewIt() {
+        installLoader { TestImages.png(40, 40) }
+        launched { fragment ->
+            fragment.ioDispatcher = Dispatchers.Unconfined
+            FixedRowMediaProvider.install(into = ByteArrayOutputStream())
+            idleMainLooper()
+
+            fragment.tap(R.id.image_viewer_save)
+
+            assertThat(snackbarText(fragment.requireView())).isEqualTo(fragment.getString(R.string.chat_image_saved))
+            val action = snackbarAction(fragment.requireView())
+            assertThat(action.text.toString()).isEqualTo(fragment.getString(R.string.chat_image_view))
+            action.performClick()
+
+            val view = shadowOf(fragment.requireActivity()).nextStartedActivity
+            assertThat(view.action).isEqualTo(Intent.ACTION_VIEW)
+            assertThat(view.data).isEqualTo(FixedRowMediaProvider.ROW)
+            assertThat(view.type).isEqualTo("image/png")
+            assertThat(view.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION).isNotEqualTo(0)
+        }
+    }
+
+    /** Two quick taps would put two copies into the gallery. The write is parked for the second tap. */
+    @Test
+    fun aSecondTapWhileTheFirstSaveIsStillWritingIsRefused() {
+        val saving = QueueingDispatcher()
+        installLoader { TestImages.png(40, 40) }
+        launched { fragment ->
+            fragment.ioDispatcher = saving
+            FixedRowMediaProvider.install(into = ByteArrayOutputStream())
+            idleMainLooper()
+
+            fragment.tap(R.id.image_viewer_save)
+            assertThat(fragment.save().isEnabled).isFalse()
+            fragment.tap(R.id.image_viewer_save)
+
+            saving.drain()
+            idleMainLooper()
+
+            assertThat(FixedRowMediaProvider.calls.count { it.op == FixedRowMediaProvider.Op.INSERT }).isEqualTo(1)
+            assertThat(fragment.save().isEnabled).isTrue()
+        }
+    }
+
+    @Test
+    fun aSaveThatCannotBeWrittenSaysSoAndOpensNothing() {
+        installLoader { TestImages.png(4, 4) }
+        launched { fragment ->
+            fragment.ioDispatcher = Dispatchers.Unconfined
+            FixedRowMediaProvider.install(into = FailingOutputStream())
+            idleMainLooper()
+
+            fragment.tap(R.id.image_viewer_save)
+
+            assertThat(snackbarText(fragment.requireView()))
+                .isEqualTo(fragment.getString(R.string.chat_image_save_failed))
+            assertThat(shadowOf(fragment.requireActivity()).nextStartedActivity).isNull()
+            assertThat(fragment.save().isEnabled).isTrue()
+        }
+    }
+
+    @Test
+    fun theSaveButtonIsNamedForScreenReaders() {
+        installLoader { TestImages.png(4, 4) }
+        launched { fragment ->
+            val name = fragment.getString(R.string.chat_image_save)
+            assertThat(fragment.save().contentDescription.toString()).isEqualTo(name)
+            assertThat(fragment.save().tooltipText.toString()).isEqualTo(name)
+        }
+    }
+
+    /** A loader that shows [bytes] as a small bitmap, whatever they are. */
+    private fun installShowing(bytes: ByteArray) {
+        val mocked = mockk<ChatImageLoader>()
+        coEvery { mocked.fetchBytes(any()) } returns bytes
+        coEvery { mocked.decodeFull(any(), any(), any()) } returns
+            ImageResult.Ready(Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888))
+        ChatImageLoaders.setForTests(mocked)
+    }
+
+    /**
+     * The decoder reads more types than the gallery is told about (WBMP, say); such a picture is
+     * shown and shared, but not offered for saving, where it could only fail.
+     */
+    @Test
+    fun aPictureOfATypeTheGalleryIsNotGivenOffersNoSave() {
+        installShowing("not a type the sniffer knows".toByteArray())
+        launched { fragment ->
+            idleMainLooper()
+            assertThat(fragment.image().drawable).isNotNull()
+            assertThat(fragment.share().isEnabled).isTrue()
+            assertThat(fragment.save().isEnabled).isFalse()
+        }
+    }
+
+    private fun inserts() = FixedRowMediaProvider.calls.count { it.op == FixedRowMediaProvider.Op.INSERT }
+
+    /**
+     * A save asked for from the chat log runs on the bytes this viewer shows, once they are shown,
+     * and only once: a recreated viewer does not store a second copy.
+     */
+    @Test
+    fun aSaveAskedForFromTheLogRunsOnceTheImageIsShownAndOnlyOnce() {
+        val parked = QueueingDispatcher()
+        val shown = TestImages.png(40, 40)
+        installLoader(ioDispatcher = parked) { shown }
+        val written = ByteArrayOutputStream()
+        FixedRowMediaProvider.install(into = written)
+        val scenario = launch(action = ImageViewerDialogFragment.Action.SAVE)
+
+        scenario.onFragment { fragment ->
+            fragment.ioDispatcher = Dispatchers.Unconfined
+            assertThat(inserts()).isEqualTo(0)
+            parked.drain()
+            idleMainLooper()
+            assertThat(fragment.image().drawable).isNotNull()
+            assertThat(inserts()).isEqualTo(1)
+            assertThat(written.toByteArray()).isEqualTo(shown)
+            assertThat(snackbarText(fragment.requireView())).isEqualTo(fragment.getString(R.string.chat_image_saved))
+        }
+
+        scenario.recreate()
+        scenario.onFragment { fragment ->
+            fragment.ioDispatcher = Dispatchers.Unconfined
+            parked.drain()
+            idleMainLooper()
+            assertThat(fragment.image().drawable).isNotNull()
+            assertThat(inserts()).isEqualTo(1)
+        }
+        scenario.close()
+    }
+
+    @Test
+    fun aShareAskedForFromTheLogStartsTheChooserOnceTheImageIsShown() {
+        val parked = QueueingDispatcher()
+        installLoader(ioDispatcher = parked) { TestImages.png(40, 40) }
+        launch(action = ImageViewerDialogFragment.Action.SHARE).use { scenario ->
+            scenario.onFragment { fragment ->
+                fragment.ioDispatcher = Dispatchers.Unconfined
+                assertThat(shadowOf(fragment.requireActivity()).nextStartedActivity).isNull()
+                parked.drain()
+                idleMainLooper()
+                assertThat(sentIntent(fragment).type).isEqualTo("image/png")
+            }
+        }
+    }
+
+    /** A save asked for on a picture the gallery cannot take says so rather than doing nothing. */
+    @Test
+    fun aSaveAskedForOnAPictureTheGalleryCannotTakeSaysSo() {
+        installShowing("not a type the sniffer knows".toByteArray())
+        FixedRowMediaProvider.install(into = ByteArrayOutputStream())
+        launch(action = ImageViewerDialogFragment.Action.SAVE).use { scenario ->
+            scenario.onFragment { fragment ->
+                idleMainLooper()
+                assertThat(snackbarText(fragment.requireView()))
+                    .isEqualTo(fragment.getString(R.string.chat_image_save_failed))
+                assertThat(FixedRowMediaProvider.calls).isEmpty()
+            }
         }
     }
 
@@ -447,6 +651,7 @@ class ImageViewerDialogFragmentTest {
             assertThat(fragment.progress().visibility).isEqualTo(View.GONE)
             assertThat(fragment.status().visibility).isEqualTo(View.VISIBLE)
             assertThat(fragment.share().isEnabled).isFalse()
+            assertThat(fragment.save().isEnabled).isFalse()
             assertThat(asked).isEmpty()
         }
     }

@@ -10,6 +10,7 @@ import android.text.method.LinkMovementMethod
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -50,6 +51,7 @@ class ChatAdapterTest {
     private val fetched = mutableListOf<String>()
     private var thumbnail: ImageResult = ImageResult.Ready(Bitmap.createBitmap(240, 240, Bitmap.Config.ARGB_8888))
     private val clicked = mutableListOf<String>()
+    private val pressed = mutableListOf<Pair<String, View>>()
     private val url = "https://x.org/a.png"
 
     private fun adapter(
@@ -66,6 +68,7 @@ class ChatAdapterTest {
         thumbnailPx = thumbnailPx,
         selfSessionId = selfSessionId,
         onImageClicked = { clicked += it },
+        onImageLongPressed = { source, anchor -> pressed += source to anchor },
         scope = scope,
         parseDispatcher = parseDispatcher,
         differConfig = AsyncDifferConfig.Builder(diff)
@@ -226,6 +229,61 @@ class ChatAdapterTest {
         assertThat(holder.image.visibility).isEqualTo(View.GONE)
         assertThat(holder.status.visibility).isEqualTo(View.VISIBLE)
         assertThat(holder.status.text.toString()).isEqualTo(activity.getString(R.string.chat_image_load_failed))
+    }
+
+    // --- the long-press menu ------------------------------------------------------------------
+
+    @Test
+    fun longPressingAPictureReportsItsSourceAndAnchor() = runTest {
+        val adapter = adapter()
+        adapter.show(info("<img src=\"$url\"/>"))
+        val holder = adapter.imageHolderAt(0)
+
+        assertThat(holder.image.performLongClick()).isTrue()
+
+        assertThat(pressed).containsExactly(url to holder.image)
+        assertThat(clicked).isEmpty()
+    }
+
+    @Test
+    fun aTapOnAPictureIsNotALongPress() = runTest {
+        val adapter = adapter()
+        adapter.show(info("<img src=\"$url\"/>"))
+
+        adapter.imageHolderAt(0).image.performClick()
+
+        assertThat(clicked).containsExactly(url)
+        assertThat(pressed).isEmpty()
+    }
+
+    /** The listener is set on every bind, so a reused holder cannot report the row it showed before. */
+    @Test
+    fun aRecycledPictureRowReportsItsNewSource() = runTest {
+        val second = "https://x.org/b.png"
+        val adapter = adapter()
+        adapter.show(info("<img src=\"$url\"/>"), info("<img src=\"$second\"/>"))
+        val holder = adapter.imageHolderAt(0)
+
+        adapter.bindViewHolder(holder, 1)
+        idleMainLooper()
+        holder.image.performLongClick()
+
+        assertThat(pressed.map { it.first }).containsExactly(second)
+    }
+
+    /** TalkBack reads the long-click action's label: "double-tap and hold for Image options". */
+    @Test
+    fun theLongPressIsNamedForScreenReaders() = runTest {
+        val adapter = adapter()
+        adapter.show(info("<img src=\"$url\"/>"))
+        val holder = adapter.imageHolderAt(0)
+
+        val node = holder.image.createAccessibilityNodeInfo()
+        val longClick = node.actionList.single {
+            it.id == AccessibilityNodeInfo.AccessibilityAction.ACTION_LONG_CLICK.id
+        }
+
+        assertThat(longClick.label.toString()).isEqualTo(activity.getString(R.string.chat_image_actions))
     }
 
     // Input sweep: every input ChatAdapter.kt branches on.

@@ -4,6 +4,7 @@
     real image: a placeholder with an intrinsic size would consume the restored zoom. Hence the
     spinner and error text are siblings. No android:background: the theme already paints the
     window black, and a second full-screen fill is overdraw.
+    The buttons draw one set of 24dp Material glyphs, padded to a 48dp touch target.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -38,21 +39,36 @@
         android:orientation="horizontal">
 
         <ImageButton
+            android:id="@+id/image_viewer_save"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="12dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/chat_image_save"
+            android:tooltipText="@string/chat_image_save"
+            android:src="@drawable/ic_download"
+            app:tint="@android:color/white" />
+
+        <ImageButton
             android:id="@+id/image_viewer_share"
             android:layout_width="48dp"
             android:layout_height="48dp"
+            android:padding="12dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/chat_image_share"
-            android:src="@android:drawable/ic_menu_share"
+            android:tooltipText="@string/chat_image_share"
+            android:src="@drawable/ic_share"
             app:tint="@android:color/white" />
 
         <ImageButton
             android:id="@+id/image_viewer_close"
             android:layout_width="48dp"
             android:layout_height="48dp"
+            android:padding="12dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/chat_image_close"
-            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:tooltipText="@string/chat_image_close"
+            android:src="@drawable/ic_close"
             app:tint="@android:color/white" />
     </LinearLayout>
 </FrameLayout>

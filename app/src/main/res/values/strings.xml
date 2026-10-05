@@ -315,6 +315,14 @@
     <string name="chat_image_open">Open image</string>
     <!-- Stands in for the second and further images of one message, which are not rendered. -->
     <string name="chat_image_placeholder">[image]</string>
+    <string name="chat_image_save">Save image</string>
+    <string name="chat_image_saved">Image saved</string>
+    <string name="chat_image_save_failed">Image could not be saved</string>
+    <!-- Snackbar action after a save: opens the saved image -->
+    <string name="chat_image_view">View</string>
+    <!-- Screen reader: what long-pressing a chat image does. A verb phrase: TalkBack reads it as
+         "Double-tap and hold to …". -->
+    <string name="chat_image_actions">Show image options</string>
 
     <!-- Used only by flavor "goog" -->
     <string name="donate_dialog_title_goog">Enjoying Mumla?</string>

@@ -82,6 +82,17 @@ class ImageShareExporterTest {
             byteArrayOf(0xFF.toByte(), 0xD8.toByte()) to jpg,
             latin1("GIF") to gif,
             byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47) to png,
+            latin1("BM") to ("bmp" to "image/bmp"),
+            latin1("B") to bin,
+            byteArrayOf(0, 0, 1, 0) to ("ico" to "image/x-icon"),
+            byteArrayOf(0, 0, 2, 0) to bin,
+            latin1("\u0000\u0000\u0000\u0018ftypheic") to ("heic" to "image/heic"),
+            latin1("\u0000\u0000\u0000\u0018ftypheix") to ("heic" to "image/heic"),
+            latin1("\u0000\u0000\u0000\u0018ftypmif1") to ("heif" to "image/heif"),
+            latin1("\u0000\u0000\u0000\u0018ftypavif") to ("avif" to "image/avif"),
+            // An MP4 is an ISO box file too; only the image brands count.
+            latin1("\u0000\u0000\u0000\u0018ftypisom") to bin,
+            latin1("\u0000\u0000\u0000\u0018ftyphei") to bin,
         )
         for ((bytes, expected) in cases) {
             assertWithMessage(bytes.contentToString()).that(ImageShareExporter.typeOf(bytes)).isEqualTo(expected)
@@ -183,5 +194,49 @@ class ImageShareExporterTest {
     @Test
     fun theMaximumAgeIsOneDay() {
         assertThat(ImageShareExporter.MAX_AGE_MS).isEqualTo(24L * 60 * 60 * 1000)
+    }
+
+    // --- the write is atomic -------------------------------------------------------------------
+
+    /** The bytes go to a temporary file that is renamed into place; none may be left over. */
+    @Test
+    fun anExportLeavesNoTemporaryFileBehind() {
+        ImageShareExporter(context).export(sourceA, TestImages.png(4, 4))
+
+        assertThat(dir.list()!!.toList()).containsExactly("$keyOfA.png")
+    }
+
+    /**
+     * A share from the chat log and one from the viewer can export the same source; the later one
+     * replaces the file under the same URI rather than writing into it.
+     */
+    @Test
+    fun aSecondExportOfTheSameSourceReplacesTheFile() {
+        val exporter = ImageShareExporter(context)
+        val first = exporter.export(sourceA, TestImages.png(4, 4))
+        val newer = TestImages.png(8, 8)
+
+        val second = exporter.export(sourceA, newer)
+
+        assertThat(second.uri).isEqualTo(first.uri)
+        assertThat(File(dir, "$keyOfA.png").readBytes()).isEqualTo(newer)
+        assertThat(dir.list()!!.toList()).containsExactly("$keyOfA.png")
+    }
+
+    /**
+     * An app that opened the earlier share is still reading it when the next export of the source
+     * lands: it keeps the bytes it opened, not a file truncated and rewritten under it.
+     */
+    @Test
+    fun aReceiverStillReadingTheEarlierShareKeepsItsBytes() {
+        val exporter = ImageShareExporter(context)
+        val older = TestImages.png(4, 4)
+        exporter.export(sourceA, older)
+
+        File(dir, "$keyOfA.png").inputStream().use { reading ->
+            exporter.export(sourceA, TestImages.png(8, 8))
+
+            assertThat(reading.readBytes()).isEqualTo(older)
+        }
     }
 }
