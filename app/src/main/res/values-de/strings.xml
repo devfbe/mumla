@@ -180,6 +180,11 @@
     <string name="chat_image_viewer_image">Bild</string>
     <string name="chat_image_open">Bild öffnen</string>
     <string name="chat_image_placeholder">[Bild]</string>
+    <string name="chat_image_save">Bild speichern</string>
+    <string name="chat_image_saved">Bild gespeichert</string>
+    <string name="chat_image_save_failed">Bild konnte nicht gespeichert werden</string>
+    <string name="chat_image_view">Ansehen</string>
+    <string name="chat_image_actions">Bildoptionen anzeigen</string>
     <string name="permission_denied_storage">Keine Berechtigung zum Lesen des Speichers</string>
     <string name="image_decode_failed">Dieses Bild konnte nicht gelesen werden</string>
     <string name="image_too_large">Bild ist zu groß für diesen Server</string>
